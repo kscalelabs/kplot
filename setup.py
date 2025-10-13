@@ -38,9 +38,9 @@ setup(
     install_requires=requirements,
     extras_require={"dev": requirements_dev},
     packages=find_packages(),
-    # entry_points={
-    #     "console_scripts": [
-    #         "cli=template_package.cli:main",
-    #     ],
-    # },
+    entry_points={
+        "console_scripts": [
+            "kplot-server=kplot.server:main",
+        ],
+    },
 )

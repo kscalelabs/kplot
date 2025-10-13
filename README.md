@@ -1,116 +1,58 @@
-# Using this template
+# kplot
 
-You can use this template repo to easily make a python package!
+Web-based visualization for kinfer-log robot telemetry data.
 
-It has some useful features like Makefiles for formatting and static-checks, as well as an automatic Github CI/CD config.
+## Server Setup (Production)
 
-Once you get things working, the repo will already be in the correct format to be published to [pypi.org](https://pypi.org/).
+Deploy server with systemd:
 
-Just follow the instructions below to set up your new repository.
-
-After setting things up, you can run `make format` and `make static-checks` in the root folder for the formatting and static type checking respectively.
-
-The structure of the template is as follows:
 ```bash
-├── LICENSE
-├── Makefile
-├── MANIFEST.in
-├── one_time_setup_config.yaml
-├── one_time_setup.py
-├── pyproject.toml
-├── README.md
-├── setup.py
-├── template_package # <-- Your code goes in here after setup!
-│   ├── __init__.py
-│   ├── py.typed
-│   └── requirements.txt
-└── tests
-    ├── conftest.py
-    └── test_dummy.py
-
-3 directories, 13 files
+git clone https://github.com/kscalelabs/kplot.git ~/kplot
+cd ~/kplot
+./scripts/deploy.sh
 ```
 
-# Installation
+Server runs at `http://your-server:5001`
 
-## Option 1 (recommended): One-time config + script
+Updates:
+```bash
+cd ~/kplot && git pull && ./scripts/deploy.sh
+```
 
-1) Edit `one_time_setup_config.yaml`
-- `distribution_name`: Project/PyPI name (e.g., my-package)
-- `import_name`: Python package import name (directory, e.g., my_package)
-- `description`: Short summary
-- `url`: Project URL (e.g., repository URL)
-- `author`, `author_email`: Your details
-- `python_min_version`: Minimum Python version (e.g., 3.11)
-- `version`: Initial package version (sets `<import_name>/__init__.py`)
-- `default_branch`: CI default branch (`master` or `main`)
-- `year`: Copyright year
+Logs:
+```bash
+sudo journalctl -u kplot.service -f
+```
 
-2) Run the one-time setup script from the repository root
-- The script reads the config and will:
-  - Rename `template_package/` to `<import_name>/`
-  - Update `setup.py` (name, description, author, author_email, url, python_requires, paths)
-  - Update `pyproject.toml` (ruff `target-version`, isort `known-first-party`)
-  - Update `MANIFEST.in` (package directory)
-  - Update `Makefile` (displayed project name and Python version)
-  - Update `LICENSE` (year and author)
-  - Update `.github/workflows/test.yml` and `publish.yml` (Python version; default branch in tests)
-  - Update `<import_name>/__init__.py` (`__version__`)
-- Requires PyYAML.
-- Review and commit the changes when satisfied.
+## Local Development
 
-After completing setup you may remove `one_time_setup.py` and `one_time_setup_config.yaml`.
+```bash
+cd ~/kplot
+pip install -e .
+kplot-server --data-dir ~/robot_telemetry --port 5001
+```
 
-## Option 2: Manual setup
+Open: `http://localhost:5001`
 
-### Pick your project details
-- Distribution name (project/PyPI name), e.g., "my-package"
-- Python package import name (directory name), e.g., "my_package"
-- Short description
-- Project URL (e.g., GitHub repo URL)
-- Author name and email
-- Minimum supported Python version (e.g., 3.11)
-- Copyright year
+## Data Format
 
-### Rename the package directory
-- Rename `template_package/` to your chosen Python import name (e.g., `my_package/`).
+```
+~/robot_telemetry/
+├── kd-1/
+│   └── session_20251013_110106/
+│       └── kinfer_log.ndjson
+├── kd-8/
+│   └── session_20251013_120000/
+│       └── kinfer_log.ndjson
+```
 
-### Edit these files
-- `setup.py`:
-  - `name`: distribution/project name
-  - `description`: short description
-  - `author`: your name
-  - `url`: project URL
-  - `python_requires`: minimum Python version (e.g., ">=3.11")
-  - Update paths referencing the package directory (`template_package/requirements.txt`, `template_package/__init__.py`) to point to your renamed package
-  - Optional: add `author_email`, `classifiers`, and console `entry_points` for a CLI
-
-- `pyproject.toml`:
-  - `[tool.ruff] target-version`: set to your target (e.g., `py311`)
-  - `[tool.ruff.lint.isort] known-first-party`: replace `template_package` with your package import name
-
-- `MANIFEST.in`:
-  - Replace `template_package/` with your package directory
-
-- `Makefile`:
-  - Update the displayed project name and Python version in the help text
-
-- `LICENSE`:
-  - Update the year and author name
-
-- `.github/workflows/test.yml` and `.github/workflows/publish.yml`:
-  - Update the `python-version` to your minimum
-  - Optional: change the default branch in triggers if using `main` instead of `master`
-
-- `README.md` (this file):
-  - Replace the title and content with your project documentation
-
-- `<your_package>/__init__.py`:
-  - Set `__version__` to your starting version (e.g., `0.1.0`)
-
-- `<your_package>/requirements.txt`:
-  - List runtime dependencies (one per line)
-
-### Start coding
-- Place your source code inside the renamed package directory.
-- Tests live under `tests/`. Adjust or extend as needed.
+NDJSON records:
+```json
+{
+  "step_id": 0,
+  "timestamp": 1760378501.967,
+  "joint_angles": [...],
+  "joint_velocities": [...],
+  "joint_order": ["dof_left_hip_pitch_04", ...]
+}
+```
