@@ -1,1 +1,1 @@
-recursive-include kplot/ *.py *.txt py.typed MANIFEST.in
+recursive-include kplot/ *.py *.txt *.html py.typed MANIFEST.in
