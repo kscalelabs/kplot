@@ -10,7 +10,7 @@ with open("README.md", "r", encoding="utf-8") as f:
     long_description: str = f.read()
 
 
-with open("template_package/requirements.txt", "r", encoding="utf-8") as f:
+with open("kplot/requirements.txt", "r", encoding="utf-8") as f:
     requirements: list[str] = f.read().splitlines()
 
 requirements_dev = [
@@ -19,18 +19,19 @@ requirements_dev = [
     "ruff",
 ]
 
-with open("template_package/__init__.py", "r", encoding="utf-8") as fh:
+with open("kplot/__init__.py", "r", encoding="utf-8") as fh:
     version_re = re.search(r"^__version__ = \"([^\"]*)\"", fh.read(), re.MULTILINE)
-assert version_re is not None, "Could not find version in template_package/__init__.py"
+assert version_re is not None, "Could not find version in kplot/__init__.py"
 version: str = version_re.group(1)
 
 
 setup(
-    name="template_package",
+    name="kplot",
     version=version,
-    description="Template python package",
-    author="Your Name",
-    url="https://github.com/yourname/my_package",
+    description="Visualize kinfer logs",
+    author="Bart van Marum",
+    author_email="bart@kcale.dev",
+    url="https://github.com/kscalelabs/kplot",
     long_description=long_description,
     long_description_content_type="text/markdown",
     python_requires=">=3.11",
