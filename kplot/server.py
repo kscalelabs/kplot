@@ -4,7 +4,7 @@
 import argparse
 import sys
 from pathlib import Path
-from kplot.vis import app, scan_sources, DATA_DIR
+from kplot import vis
 
 
 def main() -> None:
@@ -43,10 +43,9 @@ def main() -> None:
         print(f"Error: Data directory does not exist: {data_dir}", file=sys.stderr)
         sys.exit(1)
 
-    # Set data directory and scan sources
-    global DATA_DIR
-    DATA_DIR = str(data_dir)
-    sources = scan_sources()
+    # Configure vis module and scan for sources
+    vis.DATA_DIR = str(data_dir)
+    sources = vis.scan_sources()
 
 
     print(f"Loading data from: {data_dir}")
@@ -55,7 +54,7 @@ def main() -> None:
     print(f"\nStarting server at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop")
 
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    vis.app.run(host=args.host, port=args.port, debug=args.debug)
 
 
 if __name__ == "__main__":
