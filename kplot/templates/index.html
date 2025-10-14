@@ -358,15 +358,17 @@
 
       // Determine category for a plot name
       function getCategory(plotName) {
+        // Jointed/dotted series
         if (plotName.startsWith('action.')) return 'Actions';
         if (plotName.startsWith('joint_angles.')) return 'Joint Angles';
         if (plotName.startsWith('joint_velocities.')) return 'Joint Velocities';
         if (plotName.startsWith('joint_torques.')) return 'Joint Torques';
         if (plotName.startsWith('joint_amps.')) return 'Joint Currents';
         if (plotName.startsWith('joint_temps.')) return 'Joint Temperatures';
-        if (plotName.startsWith('projected_gravity.')) return 'Projected Gravity';
-        if (plotName.startsWith('gyro.') || plotName.startsWith('gyroscope.')) return 'Gyroscope';
-        if (plotName.startsWith('command.') || plotName.startsWith('commands.') || plotName.startsWith('cmd.')) return 'Commands';
+        if (plotName.startsWith('projected_gravity.') || plotName.startsWith('projected_gravity[')) return 'Projected Gravity';
+        if (plotName.startsWith('gyro.') || plotName.startsWith('gyroscope.') || plotName.startsWith('gyro[') || plotName.startsWith('gyroscope[')) return 'Gyroscope';
+        if (plotName.startsWith('command.') || plotName.startsWith('commands.') || plotName.startsWith('cmd.') ||
+            plotName.startsWith('command[') || plotName.startsWith('commands[') || plotName.startsWith('cmd[')) return 'Commands';
         if (plotName.startsWith('output.')) return 'Outputs';
         return 'Other';
       }
