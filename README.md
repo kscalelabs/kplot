@@ -36,6 +36,11 @@ kplot-server --data-dir ~/robot_telemetry --port 5001
 
 Open: `http://localhost:5001`
 
+### Pages
+
+- **`/`** - Main viewer with source selection sidebar
+- **`/latest`** - Auto-updating view of the most recent run (refreshes every 2 seconds)
+
 ## Data Format
 
 ```

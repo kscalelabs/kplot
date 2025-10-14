@@ -34,7 +34,12 @@ def main() -> None:
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Run in debug mode"
+        help="Run in debug mode (enables Flask debug + file watcher debug logging)"
+    )
+    parser.add_argument(
+        "--watch-debug",
+        action="store_true",
+        help="Enable debug logging for file watcher only"
     )
     args = parser.parse_args()
 
@@ -44,7 +49,8 @@ def main() -> None:
         sys.exit(1)
 
     # Initialize the source cache with file watching
-    cache = vis.init_cache(str(data_dir))
+    watch_debug = args.debug or args.watch_debug
+    cache = vis.init_cache(str(data_dir), debug=watch_debug)
     sources = cache.get_sources()
 
     print(f"Loading data from: {data_dir}")
@@ -52,6 +58,8 @@ def main() -> None:
     print("Data will be loaded on-demand when sources are selected")
     print("File watcher is active - new files will be detected automatically")
     print(f"\nStarting server at http://{args.host}:{args.port}")
+    print(f"  Main view:   http://{args.host}:{args.port}/")
+    print(f"  Latest view: http://{args.host}:{args.port}/latest")
     print("Press Ctrl+C to stop")
 
     try:

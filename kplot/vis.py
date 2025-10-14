@@ -12,17 +12,18 @@ app = Flask(__name__)
 _source_cache: Optional[SourceCache] = None
 
 
-def init_cache(data_dir: str) -> SourceCache:
+def init_cache(data_dir: str, debug: bool = False) -> SourceCache:
     """Initialize and start the source cache with file watching.
     
     Args:
         data_dir: Path to the data directory to watch
+        debug: Enable debug logging for file watching
         
     Returns:
         The initialized SourceCache instance
     """
     global _source_cache
-    _source_cache = SourceCache(data_dir)
+    _source_cache = SourceCache(data_dir, debug=debug)
     _source_cache.start_watching()
     return _source_cache
 
@@ -58,6 +59,42 @@ def index() -> str:
         search_texts_json=json.dumps(search_texts),
         all_series_json=json.dumps([]),
     )
+
+
+@app.route("/latest")
+def latest() -> str:
+    """Render the latest run viewer page."""
+    sources = scan_sources()
+    if sources:
+        latest_index = 0
+        latest_label = sources[0].label
+    else:
+        latest_index = -1
+        latest_label = None
+    
+    return render_template(
+        "latest.html",
+        latest_index=latest_index,
+        latest_label=latest_label,
+    )
+
+
+@app.route("/latest-info")
+def latest_info() -> str:
+    """Return info about the current latest source (for auto-refresh polling)."""
+    sources = scan_sources()
+    if sources:
+        return jsonify({
+            "index": 0,
+            "label": sources[0].label,
+            "path": sources[0].path,
+        })
+    else:
+        return jsonify({
+            "index": -1,
+            "label": None,
+            "path": None,
+        })
 
 
 @app.route("/sources")
