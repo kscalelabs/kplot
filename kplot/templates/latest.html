@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Latest Run - Kinfer NDJSON Viewer</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { 
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+        margin: 0; 
+        padding: 0;
+        background: #1e1e1e;
+        color: #cccccc;
+        overflow: hidden;
+      }
+      .main-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100vw;
+      }
+      header { 
+        background: #2d2d30;
+        padding: 12px 16px;
+        border-bottom: 1px solid #3e3e42;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+      .header-left {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex: 1;
+      }
+      .header-right {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .current-source {
+        font-size: 14px;
+        font-weight: 600;
+        color: #4ec9b0;
+        font-family: monospace;
+      }
+      .auto-refresh-indicator {
+        font-size: 11px;
+        color: #888888;
+        padding: 4px 8px;
+        background: #3c3c3c;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .auto-refresh-indicator.active::before {
+        content: "●";
+        color: #4ec9b0;
+        animation: pulse 2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+      input[type=text] {
+        padding: 6px 12px;
+        background: #3c3c3c;
+        border: 1px solid #3e3e42;
+        border-radius: 3px;
+        color: #cccccc;
+        font-size: 13px;
+        min-width: 300px;
+        outline: none;
+      }
+      input[type=text]:focus {
+        border-color: #007acc;
+        background: #1e1e1e;
+      }
+      button { 
+        padding: 6px 12px;
+        border: 1px solid #3e3e42;
+        background: #0e639c;
+        color: #ffffff;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      button:hover { 
+        background: #1177bb;
+      }
+      button.secondary {
+        background: #3c3c3c;
+        color: #cccccc;
+      }
+      button.secondary:hover {
+        background: #4e4e4e;
+      }
+      .charts-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+      }
+      #charts.panes {
+        display: block;
+      }
+      .category { 
+        margin: 0 0 24px;
+      }
+      .category h2 { 
+        margin: 0 0 12px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #888888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .category-grid { 
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+        gap: 16px;
+      }
+      .chart { 
+        border: 1px solid #3e3e42;
+        border-radius: 4px;
+        padding: 12px;
+        background: #252526;
+      }
+      .chart h3 { 
+        margin: 0 0 8px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #cccccc;
+      }
+      #status {
+        font-size: 12px;
+        color: #888888;
+      }
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #888;
+        padding: 40px;
+        text-align: center;
+      }
+      .empty-state h2 {
+        font-size: 18px;
+        margin: 0 0 12px;
+      }
+      .empty-state p {
+        font-size: 14px;
+        margin: 0;
+      }
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e1e1e;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #424242;
+        border-radius: 5px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #4e4e4e;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="main-container">
+      <header>
+        <div class="header-left">
+          <div>
+            <strong style="font-size: 11px; color: #888; display: block; margin-bottom: 4px;">LATEST RUN</strong>
+            <div class="current-source" id="current-source">-</div>
+          </div>
+          <input type="text" id="plot-search" placeholder="Search plots..." />
+        </div>
+        <div class="header-right">
+          <div class="auto-refresh-indicator active" id="auto-refresh-status">
+            Auto-refresh: 2s
+          </div>
+          <button id="refresh-btn">Refresh Now</button>
+          <button class="secondary" onclick="window.location.href='/'">View All</button>
+          <span id="status"></span>
+        </div>
+      </header>
+      <main class="charts-container">
+        <div id="charts" class="panes"></div>
+      </main>
+    </div>
+
+    <script>
+      let currentSourceIndex = {{ latest_index }};
+      let currentSourceLabel = {{ latest_label | tojson }};
+      let allSeries = [];
+      let seriesData = null;
+      let plotSearchQuery = '';
+      let autoRefreshInterval = null;
+      const REFRESH_INTERVAL = 2000; // 2 seconds
+
+      function makeId(name) {
+        return 'chart-' + name.replace(/[^a-zA-Z0-9_\-]/g, '_');
+      }
+
+      // Get filtered plot names based on search
+      function getFilteredPlots() {
+        if (!plotSearchQuery) return allSeries;
+        const terms = plotSearchQuery.toLowerCase().split(/\s+/).filter(t => t);
+        if (terms.length === 0) return allSeries;
+        return allSeries.filter(s => {
+          const lower = s.toLowerCase();
+          return terms.every(term => lower.includes(term));
+        });
+      }
+
+      // Determine category for a plot name
+      function getCategory(plotName) {
+        if (plotName.startsWith('action.')) return 'Actions';
+        if (plotName.startsWith('joint_angles.')) return 'Joint Angles';
+        if (plotName.startsWith('joint_velocities.')) return 'Joint Velocities';
+        if (plotName.startsWith('joint_torques.')) return 'Joint Torques';
+        if (plotName.startsWith('joint_amps.')) return 'Joint Currents';
+        if (plotName.startsWith('joint_temps.')) return 'Joint Temperatures';
+        if (plotName.startsWith('projected_gravity.') || plotName.startsWith('projected_gravity[')) return 'Projected Gravity';
+        if (plotName.startsWith('gyro.') || plotName.startsWith('gyroscope.') || plotName.startsWith('gyro[') || plotName.startsWith('gyroscope[')) return 'Gyroscope';
+        if (plotName.startsWith('command.') || plotName.startsWith('commands.') || plotName.startsWith('cmd.') ||
+            plotName.startsWith('command[') || plotName.startsWith('commands[') || plotName.startsWith('cmd[')) return 'Commands';
+        if (plotName.startsWith('output.')) return 'Outputs';
+        return 'Other';
+      }
+
+      // Render charts
+      function render() {
+        const plots = getFilteredPlots();
+        const charts = document.getElementById('charts');
+        charts.innerHTML = '';
+
+        if (currentSourceIndex === -1 || !currentSourceLabel) {
+          charts.innerHTML = `
+            <div class="empty-state">
+              <h2>No Data Available</h2>
+              <p>No telemetry logs found. Upload some data to get started!</p>
+            </div>
+          `;
+          return;
+        }
+
+        if (!seriesData || plots.length === 0) {
+          charts.innerHTML = `
+            <div class="empty-state">
+              <h2>No Plots Found</h2>
+              <p>Try adjusting your search or check that the data file contains valid records.</p>
+            </div>
+          `;
+          return;
+        }
+
+        const color = '#1f77b4';
+
+        // Group plots by category
+        const grouped = {};
+        plots.forEach(name => {
+          const cat = getCategory(name);
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push(name);
+        });
+
+        const categoryOrder = [
+          'Actions',
+          'Joint Angles',
+          'Joint Velocities',
+          'Joint Torques',
+          'Joint Currents',
+          'Joint Temperatures',
+          'Projected Gravity',
+          'Gyroscope',
+          'Commands',
+          'Outputs',
+          'Other'
+        ];
+
+        function renderCategory(category, names) {
+          if (names.length === 0) return;
+          const catDiv = document.createElement('div');
+          catDiv.className = 'category';
+          const h2 = document.createElement('h2');
+          h2.textContent = category;
+          catDiv.appendChild(h2);
+          const container = document.createElement('div');
+          container.className = 'category-grid';
+          catDiv.appendChild(container);
+          charts.appendChild(catDiv);
+
+          names.forEach(plotName => {
+            const data = seriesData[plotName];
+            if (!data || !data[0]) return;
+
+            const chartDiv = document.createElement('div');
+            chartDiv.className = 'chart';
+
+            const title = document.createElement('h3');
+            title.textContent = plotName;
+            chartDiv.appendChild(title);
+
+            const plotDiv = document.createElement('div');
+            plotDiv.id = makeId(plotName);
+            plotDiv.style.width = '100%';
+            plotDiv.style.height = '300px';
+            chartDiv.appendChild(plotDiv);
+
+            container.appendChild(chartDiv);
+
+            const trace = {
+              x: data[0].x || [],
+              y: data[0].y || [],
+              mode: 'lines',
+              name: plotName,
+              line: { color: color, width: 1.5 }
+            };
+
+            const layout = {
+              margin: { l: 50, r: 20, t: 10, b: 40 },
+              showlegend: false,
+              xaxis: { gridcolor: '#3e3e42', zerolinecolor: '#3e3e42', title: 'Step' },
+              yaxis: { gridcolor: '#3e3e42', zerolinecolor: '#3e3e42' },
+              paper_bgcolor: '#252526',
+              plot_bgcolor: '#1e1e1e',
+              font: { color: '#cccccc', size: 11 }
+            };
+
+            Plotly.newPlot(plotDiv.id, [trace], layout, { responsive: true });
+          });
+        }
+
+        // Render categories in order
+        categoryOrder.forEach(category => {
+          renderCategory(category, grouped[category] || []);
+        });
+
+        // Render any remaining categories
+        Object.keys(grouped)
+          .filter(cat => !categoryOrder.includes(cat))
+          .forEach(cat => {
+            renderCategory(cat, grouped[cat]);
+          });
+      }
+
+      // Load data for the latest source
+      async function loadData() {
+        if (currentSourceIndex === -1) {
+          seriesData = null;
+          allSeries = [];
+          render();
+          return;
+        }
+
+        try {
+          document.getElementById('status').textContent = 'Loading...';
+          const resp = await fetch('/data?sources=' + currentSourceIndex);
+          const data = await resp.json();
+          seriesData = data.series_data;
+          allSeries = data.series || [];
+          render();
+          document.getElementById('status').textContent = '';
+        } catch (err) {
+          console.error(err);
+          document.getElementById('status').textContent = 'Error';
+        }
+      }
+
+      // Check for new latest source
+      async function checkForUpdates() {
+        try {
+          const resp = await fetch('/latest-info');
+          const data = await resp.json();
+          
+          if (data.index !== currentSourceIndex || data.label !== currentSourceLabel) {
+            // New latest source detected!
+            console.log('New latest source detected:', data.label);
+            currentSourceIndex = data.index;
+            currentSourceLabel = data.label;
+            document.getElementById('current-source').textContent = data.label || 'No data';
+            await loadData();
+          }
+        } catch (err) {
+          console.error('Error checking for updates:', err);
+        }
+      }
+
+      // Initialize
+      document.getElementById('current-source').textContent = currentSourceLabel || 'No data';
+      loadData();
+
+      // Start auto-refresh
+      autoRefreshInterval = setInterval(checkForUpdates, REFRESH_INTERVAL);
+
+      // Plot search
+      let plotSearchTimeout;
+      document.getElementById('plot-search').oninput = (e) => {
+        clearTimeout(plotSearchTimeout);
+        plotSearchTimeout = setTimeout(() => {
+          plotSearchQuery = e.target.value.trim();
+          render();
+        }, 100);
+      };
+
+      // Manual refresh
+      document.getElementById('refresh-btn').onclick = () => {
+        checkForUpdates();
+      };
+
+      // Cleanup on page unload
+      window.addEventListener('beforeunload', () => {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+        }
+      });
+    </script>
+  </body>
+</html>
+
