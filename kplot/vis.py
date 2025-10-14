@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 
 # Data directory set by server.py
-DATA_DIR = "/home/bart/Downloads/rerun_sep23/data"
+DATA_DIR = ""
 
 
 def scan_sources() -> List['DataSource']:
