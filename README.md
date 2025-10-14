@@ -1,6 +1,8 @@
 # kplot
 
 Web-based visualization for kinfer-log robot telemetry data.
+<img width="2144" height="1905" alt="image" src="https://github.com/user-attachments/assets/5365491f-99a7-4fc2-a36b-db3422dcbb5e" />
+DATA DATA DATA DATA!!!!
 
 ## Server Setup (Production)
 
