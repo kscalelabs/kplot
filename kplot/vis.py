@@ -9,51 +9,42 @@ app = Flask(__name__)
 
 
 # Data directory set by server.py
-DATA_DIR = ""
+DATA_DIR = "/home/bart/Downloads/rerun_sep23/data"
 
 
 def scan_sources() -> List['DataSource']:
-    """Scan DATA_DIR for kinfer_log.ndjson files and return DataSource list."""
+    """Return all available data sources discovered under DATA_DIR.
+
+    Simple one-pass scan with clear sorting: by robot name, then directory mtime.
+    """
+    print(DATA_DIR, flush=True)
     if not DATA_DIR or not os.path.isdir(DATA_DIR):
         return []
-    
-    # Group sources by robot name
-    robot_sources: Dict[str, List[Tuple[str, str, float, str]]] = {}
-    
-    for path in glob.glob(os.path.join(DATA_DIR, "**", "kinfer_log.ndjson"), recursive=True):
-        rel_path = os.path.relpath(path, DATA_DIR)
+
+    discovered: List[Tuple[str, float, DataSource]] = []
+
+    for ndjson_path in glob.glob(os.path.join(DATA_DIR, "**", "kinfer_log.ndjson"), recursive=True):
+        rel_path = os.path.relpath(ndjson_path, DATA_DIR)
         parts = rel_path.split(os.sep)
-        
-        # Structure: robot_name/run_dir/kinfer_log.ndjson
-        if len(parts) >= 3 and parts[-1] == "kinfer_log.ndjson":
-            robot_name = parts[0]
-            run_dir = parts[1]
-            
-            # Get directory modification time
-            dir_path = os.path.join(DATA_DIR, robot_name, run_dir)
-            try:
-                mtime = os.path.getmtime(dir_path)
-            except:
-                mtime = 0
-            
-            search_text = f"{robot_name} {run_dir}".lower()
-            
-            if robot_name not in robot_sources:
-                robot_sources[robot_name] = []
-            robot_sources[robot_name].append((run_dir, search_text, mtime, path))
-    
-    # Build final source list: sorted by robot, then by modification time
-    sources = []
-    for robot_name in sorted(robot_sources.keys()):
-        runs = robot_sources[robot_name]
-        # Sort by modification time (earliest first)
-        runs.sort(key=lambda x: x[2])
-        
-        for run_dir, search_text, mtime, path in runs:
-            label = f"{robot_name} | {run_dir}"
-            sources.append(DataSource(label, path, search_text))
-    
-    return sources
+
+        # Expect: robot_name/run_dir/kinfer_log.ndjson
+        if len(parts) < 3 or parts[-1] != "kinfer_log.ndjson":
+            continue
+
+        robot_name, run_dir = parts[0], parts[1]
+        label = f"{robot_name} | {run_dir}"
+        search_text = f"{robot_name} {run_dir}".lower()
+        dir_path = os.path.join(DATA_DIR, robot_name, run_dir)
+        try:
+            mtime = os.path.getmtime(dir_path)
+        except Exception:
+            mtime = 0
+
+        discovered.append((robot_name, mtime, DataSource(label, ndjson_path, search_text)))
+
+    # Sort by robot, then by directory modification time (earliest first)
+    discovered.sort(key=lambda item: (item[0], item[1]))
+    return [ds for _, __, ds in discovered]
 
 
 class DataSource:
@@ -119,7 +110,7 @@ def extract_series(record: Dict[str, Any], joint_names: List[str]) -> Dict[str, 
     series: Dict[str, float] = {}
     
     JOINTED_KEYS = {"joint_angles", "joint_velocities", "joint_amps", "joint_torques", 
-                    "joint_temps", "output", "action", "torque_commands", "torque_diff"}
+                    "joint_temps", "output", "action"}
     
     for key, value in record.items():
         if value is None or key == "step_id":
@@ -167,59 +158,59 @@ def list_sources() -> str:
 
 @app.route("/data")
 def data() -> str:
-    """Return data for selected sources only."""
+    """Return series data for user-selected sources.
+
+    Query params:
+      - sources: comma-separated indices into scan_sources() ordering
+      - o: optional comma-separated integer offsets per selected source
+    """
     selected_raw = request.args.get("sources", "")
     if not selected_raw:
         return jsonify({"sources": [], "series_data": {}})
-    
+
     try:
         selected_indices = [int(x.strip()) for x in selected_raw.split(",") if x.strip()]
     except Exception:
         return jsonify({"sources": [], "series_data": {}})
-    
-    # Scan and get selected sources
+
     all_sources = scan_sources()
-    selected_sources = []
+    selected_sources: List[DataSource] = []
     for idx in selected_indices:
         if 0 <= idx < len(all_sources):
             ds = all_sources[idx]
             ds.load()
             selected_sources.append(ds)
-    
+
     if not selected_sources:
         return jsonify({"sources": [], "series_data": {}})
-    
-    # Get all series from loaded sources
-    all_series = sorted({name for ds in selected_sources for name in ds.series_to_points.keys()})
-    
-    # Parse offsets
-    raw = request.args.get("o", "")
-    offsets = [0] * len(selected_sources)
-    if raw:
-        try:
-            parsed = [int(x.strip()) for x in raw.split(",") if x.strip()]
-            offsets = parsed[:len(selected_sources)] + [0] * max(0, len(selected_sources) - len(parsed))
-        except Exception:
-            pass
 
-    # Build response
-    series_data: Dict[str, List[Dict[str, List[float]]]] = {}
-    for series_name in all_series:
-        per_source = []
-        for idx, ds in enumerate(selected_sources):
-            points = ds.series_to_points.get(series_name, [])
-            if points:
-                x = [step_id + offsets[idx] for step_id, _ in points]
-                y = [value for _, value in points]
-            else:
-                x, y = [], []
-            per_source.append({"x": x, "y": y})
-        series_data[series_name] = per_source
+    # Parse optional offsets, padded/truncated to match number of sources
+    raw_offsets = request.args.get("o", "")
+    try:
+        parsed_offsets = [int(x.strip()) for x in raw_offsets.split(",") if x.strip()]
+    except Exception:
+        parsed_offsets = []
+    offsets = (parsed_offsets + [0] * len(selected_sources))[:len(selected_sources)]
+
+    # Union of series across selected sources
+    all_series = sorted({name for ds in selected_sources for name in ds.series_to_points})
+
+    # Build series -> per-source {x,y} arrays
+    series_data: Dict[str, List[Dict[str, List[float]]]] = {
+        series_name: [
+            {
+                "x": [step_id + offsets[src_idx] for step_id, _ in selected_sources[src_idx].series_to_points.get(series_name, [])],
+                "y": [value for _, value in selected_sources[src_idx].series_to_points.get(series_name, [])],
+            }
+            for src_idx in range(len(selected_sources))
+        ]
+        for series_name in all_series
+    }
 
     return jsonify({
         "sources": [ds.label for ds in selected_sources],
         "series": all_series,
-        "series_data": series_data
+        "series_data": series_data,
     })
 
 

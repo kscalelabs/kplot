@@ -48,6 +48,7 @@ def main() -> None:
     DATA_DIR = str(data_dir)
     sources = scan_sources()
 
+
     print(f"Loading data from: {data_dir}")
     print(f"Found {len(sources)} data sources")
     print("Data will be loaded on-demand when sources are selected")
