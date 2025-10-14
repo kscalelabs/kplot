@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from kplot.vis import app, load_data_sources
+from kplot.vis import app
 
 
 def main() -> None:
@@ -49,14 +49,15 @@ def main() -> None:
 
     print(f"Loading data from: {data_dir}")
 
-    # Load data sources from the specified directory
+    # Scan for data sources from the specified directory
     from kplot import vis
 
-    vis.DATA_SOURCES, vis.ALL_SERIES = load_data_sources(str(data_dir))
+    vis.DATA_DIR = str(data_dir)  # Set the data directory for rescan
+    vis.DATA_SOURCES = vis.scan_data_sources(str(data_dir))
     vis.SOURCE_LABELS = [ds.label for ds in vis.DATA_SOURCES]
 
-    print(f"Loaded {len(vis.DATA_SOURCES)} data sources")
-    print(f"Found {len(vis.ALL_SERIES)} unique series")
+    print(f"Found {len(vis.DATA_SOURCES)} data sources")
+    print("Data will be loaded on-demand when sources are selected")
     print(f"\nStarting server at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop")
 

@@ -6,325 +6,420 @@
     <title>Kinfer NDJSON Viewer</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 0 16px; }
-      header { position: sticky; top: 0; background: #fff; padding: 12px 0; z-index: 10; border-bottom: 1px solid #eee; }
-      .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-      .control-group { display: flex; align-items: center; gap: 6px; }
-      .charts { padding: 16px 0 36px; }
-      .category { margin: 20px 0 24px; }
-      .category h2 { margin: 0 0 10px; font-size: 16px; font-weight: 700; color: #333; }
-      .category-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 18px; }
-      .chart { border: 1px solid #e6e6e6; border-radius: 8px; padding: 8px; background: #fafafa; }
-      .chart h3 { margin: 4px 0 8px; font-size: 14px; font-weight: 600; }
-      input[type=number] { width: 100px; padding: 6px 8px; }
-      button { padding: 8px 12px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; }
-      button:hover { background: #f3f3f3; }
-      .legend-label { display:inline-block; padding:2px 6px; border-radius:4px; border:1px solid #ddd; margin-right:6px; font-size:12px; }
-      .src-toggle { cursor: pointer; }
-      .src-off { opacity: 0.35; }
-      #search { padding: 6px 8px; min-width: 220px; }
+      * { box-sizing: border-box; }
+      body { 
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+        margin: 0; 
+        padding: 0;
+        background: #1e1e1e;
+        color: #cccccc;
+        overflow: hidden;
+      }
+      .main-container {
+        display: flex;
+        height: 100vh;
+        width: 100vw;
+      }
+      .sidebar {
+        width: 320px;
+        background: #252526;
+        border-right: 1px solid #3e3e42;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .sidebar-header {
+        padding: 12px 16px;
+        background: #2d2d30;
+        border-bottom: 1px solid #3e3e42;
+      }
+      .sidebar-search {
+        width: 100%;
+        padding: 8px 12px;
+        background: #3c3c3c;
+        border: 1px solid #3e3e42;
+        border-radius: 4px;
+        color: #cccccc;
+        font-size: 13px;
+        outline: none;
+      }
+      .sidebar-search:focus {
+        border-color: #007acc;
+        background: #1e1e1e;
+      }
+      .series-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+      }
+      .series-category {
+        margin-bottom: 8px;
+      }
+      .series-category-title {
+        padding: 6px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #888888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+      }
+      .series-item {
+        display: flex;
+        align-items: center;
+        padding: 4px 8px;
+        cursor: pointer;
+        border-radius: 3px;
+        font-size: 13px;
+      }
+      .series-item:hover {
+        background: #2a2d2e;
+      }
+      .series-item input[type=checkbox] {
+        margin-right: 8px;
+        cursor: pointer;
+      }
+      .series-item label {
+        cursor: pointer;
+        flex: 1;
+        user-select: none;
+      }
+      .content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      header { 
+        background: #2d2d30;
+        padding: 12px 16px;
+        border-bottom: 1px solid #3e3e42;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .control-group { 
+        display: flex; 
+        align-items: center; 
+        gap: 6px; 
+      }
+      .control-group label {
+        font-size: 12px;
+        color: #888888;
+      }
+      input[type=number] { 
+        width: 80px; 
+        padding: 4px 8px;
+        background: #3c3c3c;
+        border: 1px solid #3e3e42;
+        border-radius: 3px;
+        color: #cccccc;
+        font-size: 12px;
+      }
+      button { 
+        padding: 6px 12px;
+        border: 1px solid #3e3e42;
+        background: #0e639c;
+        color: #ffffff;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      button:hover { 
+        background: #1177bb;
+      }
+      .legend-label { 
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 3px;
+        border: 1px solid #3e3e42;
+        margin-right: 4px;
+        font-size: 11px;
+        background: #3c3c3c;
+      }
+      .src-toggle { 
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+      .src-off { 
+        opacity: 0.4;
+        background: #2d2d30;
+      }
+      .charts-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+      }
+      .category { 
+        margin: 0 0 24px;
+      }
+      .category h2 { 
+        margin: 0 0 12px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #888888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .category-grid { 
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+        gap: 16px;
+      }
+      .chart { 
+        border: 1px solid #3e3e42;
+        border-radius: 4px;
+        padding: 12px;
+        background: #252526;
+      }
+      .chart h3 { 
+        margin: 0 0 8px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #cccccc;
+      }
+      #status {
+        font-size: 12px;
+        color: #888888;
+      }
+      /* Custom scrollbar for VSCode look */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e1e1e;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #424242;
+        border-radius: 5px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #4e4e4e;
+      }
+      .select-all-btn {
+        background: #3c3c3c;
+        padding: 4px 8px;
+        margin: 4px 8px 8px;
+        font-size: 11px;
+      }
+      .select-all-btn:hover {
+        background: #4e4e4e;
+      }
     </style>
   </head>
   <body>
-    <header>
-      <div class="controls">
-        <div class="control-group"> 
-          <label for="search"><strong>Search:</strong></label>
-          <input id="search" type="text" placeholder="Filter titles..." />
+    <div class="main-container">
+      <!-- Sidebar: Data Sources -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <strong style="font-size: 13px; display: block; margin-bottom: 8px;">Data Sources</strong>
+          <span id="source-count" style="font-size: 11px; color: #888;"></span>
         </div>
-        <div class="control-group" id="source-toggles">
-          <strong>Sources:</strong>
-          {% for idx, label in source_labels %}
-          <button class="legend-label src-toggle" type="button" data-index="{{ idx }}">{{ idx }}: {{ label }}</button>
-          {% endfor %}
+        <button class="select-all-btn" id="deselect-all-sources">Clear All</button>
+        <div class="series-list" id="source-list">
+          <!-- Data source checkboxes -->
         </div>
-        <div id="offset-controls" class="control-group"></div>
-        <div class="control-group">
-          <button id="apply">Apply offsets</button>
+      </aside>
+
+      <!-- Main content -->
+      <div class="content">
+        <header>
+          <input type="text" id="plot-search" placeholder="Search plots..." style="padding: 6px 12px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 3px; color: #cccccc; font-size: 13px; min-width: 300px; outline: none;" />
+          <button id="refresh-btn">Refresh</button>
           <span id="status"></span>
-        </div>
+        </header>
+        <main class="charts-container">
+          <div id="charts"></div>
+        </main>
       </div>
-    </header>
-    <main>
-      <div id="charts" class="charts"></div>
-    </main>
+    </div>
 
     <script>
-      const sourceLabels = {{ source_labels_json | safe }};
-      const allSeries = {{ all_series_json | safe }};
-      const categoriesOrder = [
-        'Joint Angles',
-        'Joint Velocities',
-        'Joint Amps',
-        'Joint Torques',
-        'Torque Commands',
-        'Torque Diff',
-        'Joint Temperatures',
-        'Action',
-        'Output',
-        'Commands',
-        'Projected Gravity',
-        'Gyroscope',
-        'Accel',
-        'Quaternion',
-        'Other'
-      ];
+      let sourceLabels = {{ source_labels_json | safe }};
+      let selectedSources = []; // Indices of selected sources
+      let allSeries = [];
+      let seriesData = null;
+      let plotSearchQuery = '';
 
       function makeId(name) {
         return 'chart-' + name.replace(/[^a-zA-Z0-9_\-]/g, '_');
       }
 
-      function categoryOf(name) {
-        if (name.startsWith('joint_angles.')) return 'Joint Angles';
-        if (name.startsWith('joint_velocities.')) return 'Joint Velocities';
-        if (name.startsWith('joint_amps.')) return 'Joint Amps';
-        if (name.startsWith('joint_torques.')) return 'Joint Torques';
-        if (name.startsWith('torque_commands.')) return 'Torque Commands';
-        if (name.startsWith('torque_diff.')) return 'Torque Diff';
-        if (name.startsWith('joint_temps.')) return 'Joint Temperatures';
-        if (name.startsWith('action.')) return 'Action';
-        if (name.startsWith('output.')) return 'Output';
-        if (name.startsWith('command[')) return 'Commands';
-        if (name.startsWith('projected_gravity[')) return 'Projected Gravity';
-        if (name.startsWith('gyroscope[') || name.startsWith('gyro[')) return 'Gyroscope';
-        if (name.startsWith('accel[')) return 'Accel';
-        if (name.startsWith('quaternion[')) return 'Quaternion';
-        if (name === 'timestamp_us' || name === 't_us') return 'Other';
-        return 'Other';
-      }
-
-      // Global per-source visibility state
-      let globalSourceEnabled = sourceLabels.map(() => true);
-      // Search/filter state and cached data
-      let searchQuery = '';
-      let lastSeriesData = null; // set after first fetch
-      let searchDebounceHandle = null;
-
-      function getFilteredNames(sourceNames) {
-        const q = (searchQuery || '').trim().toLowerCase();
-        if (!q) return sourceNames.slice().sort();
-        return sourceNames.filter((n) => n.toLowerCase().includes(q)).sort();
-      }
-
-      function subsetSeriesData(seriesData, names) {
-        const out = {};
-        names.forEach((n) => { if (seriesData[n]) out[n] = seriesData[n]; });
-        return out;
-      }
-
-      function rerenderWithFilter() {
-        const names = lastSeriesData ? getFilteredNames(Object.keys(lastSeriesData))
-                                    : getFilteredNames(allSeries);
-        ensureChartsExist(names);
-        if (lastSeriesData) {
-          renderCharts(subsetSeriesData(lastSeriesData, names));
-        }
-      }
-
-      function buildOffsetControls() {
-        const container = document.getElementById('offset-controls');
-        container.innerHTML = '';
+      // Build data source checkboxes in sidebar
+      function buildSourceList() {
+        const list = document.getElementById('source-list');
+        list.innerHTML = '';
         sourceLabels.forEach((label, idx) => {
-          const wrap = document.createElement('div');
-          wrap.className = 'control-group';
-          const labStart = document.createElement('label');
-          labStart.htmlFor = `start-${idx}`;
-          labStart.textContent = `Start ${idx}`;
-          const inputStart = document.createElement('input');
-          inputStart.type = 'number';
-          inputStart.step = '1';
-          inputStart.id = `start-${idx}`;
-          inputStart.placeholder = 'min step';
-
-          const labEnd = document.createElement('label');
-          labEnd.htmlFor = `end-${idx}`;
-          labEnd.textContent = `End ${idx}`;
-          const inputEnd = document.createElement('input');
-          inputEnd.type = 'number';
-          inputEnd.step = '1';
-          inputEnd.id = `end-${idx}`;
-          inputEnd.placeholder = 'max step';
-
-          const labOff = document.createElement('label');
-          labOff.htmlFor = `offset-${idx}`;
-          labOff.textContent = `Offset ${idx}`;
-          const inputOff = document.createElement('input');
-          inputOff.type = 'number';
-          inputOff.step = '1';
-          inputOff.id = `offset-${idx}`;
-          inputOff.value = '0';
-
-          wrap.appendChild(labStart);
-          wrap.appendChild(inputStart);
-          wrap.appendChild(labEnd);
-          wrap.appendChild(inputEnd);
-          wrap.appendChild(labOff);
-          wrap.appendChild(inputOff);
-          container.appendChild(wrap);
+          const item = document.createElement('div');
+          item.className = 'series-item';
+          
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = selectedSources.includes(idx);
+          cb.id = `src-${idx}`;
+          cb.onchange = () => {
+            if (cb.checked) {
+              selectedSources.push(idx);
+            } else {
+              selectedSources = selectedSources.filter(i => i !== idx);
+            }
+            loadData();
+          };
+          
+          const lbl = document.createElement('label');
+          lbl.htmlFor = cb.id;
+          lbl.textContent = label;
+          lbl.style.cursor = 'pointer';
+          
+          item.appendChild(cb);
+          item.appendChild(lbl);
+          list.appendChild(item);
         });
+        
+        updateSourceCount();
       }
 
-      function getOffsets() {
-        return sourceLabels.map((_, idx) => {
-          const v = parseInt(document.getElementById(`offset-${idx}`).value || '0', 10);
-          return Number.isFinite(v) ? v : 0;
-        });
+      function updateSourceCount() {
+        const count = document.getElementById('source-count');
+        count.textContent = `${selectedSources.length} of ${sourceLabels.length} selected`;
       }
 
-      function getStarts() {
-        return sourceLabels.map((_, idx) => {
-          const raw = document.getElementById(`start-${idx}`).value;
-          const v = raw === '' ? null : parseInt(raw, 10);
-          return Number.isFinite(v) ? v : null;
-        });
+      // Get filtered plot names based on search
+      function getFilteredPlots() {
+        if (!plotSearchQuery) return allSeries;
+        const q = plotSearchQuery.toLowerCase();
+        return allSeries.filter(s => s.toLowerCase().includes(q));
       }
 
-      function getEnds() {
-        return sourceLabels.map((_, idx) => {
-          const raw = document.getElementById(`end-${idx}`).value;
-          const v = raw === '' ? null : parseInt(raw, 10);
-          return Number.isFinite(v) ? v : null;
-        });
-      }
-
-      function showStatus(text) {
-        document.getElementById('status').textContent = text || '';
-      }
-
-      async function fetchDataWithOffsets(offsets, starts, ends) {
-        const params = new URLSearchParams();
-        params.set('o', offsets.join(','));
-        // Encode starts/ends as comma-separated, empty for nulls
-        params.set('s', starts.map(v => (v === null ? '' : String(v))).join(','));
-        params.set('e', ends.map(v => (v === null ? '' : String(v))).join(','));
-        const resp = await fetch('/data?' + params.toString());
-        if (!resp.ok) throw new Error('Failed to fetch data');
-        return await resp.json();
-      }
-
-      function ensureChartsExist(seriesNames) {
+      // Render charts
+      function render() {
+        const plots = getFilteredPlots();
         const charts = document.getElementById('charts');
         charts.innerHTML = '';
-        // Group series by category
-        const grouped = {};
-        seriesNames.forEach((name) => {
-          const cat = categoryOf(name);
-          if (!grouped[cat]) grouped[cat] = [];
-          grouped[cat].push(name);
-        });
-        // Render in configured category order first, then any extra categories
-        const presentCats = Object.keys(grouped);
-        const orderedCats = [
-          ...categoriesOrder.filter((c) => presentCats.includes(c)),
-          ...presentCats.filter((c) => !categoriesOrder.includes(c)).sort()
-        ];
-        orderedCats.forEach((cat) => {
-          const section = document.createElement('section');
-          section.className = 'category';
-          const h = document.createElement('h2');
-          h.textContent = cat;
-          section.appendChild(h);
-          const grid = document.createElement('div');
-          grid.className = 'category-grid';
-          const names = grouped[cat].slice().sort();
-          names.forEach((name) => {
-            const div = document.createElement('div');
-            div.className = 'chart';
-            const title = document.createElement('h3');
-            title.textContent = name;
-            const plot = document.createElement('div');
-            plot.id = makeId(name);
-            plot.style.width = '100%';
-            plot.style.height = '320px';
-            div.appendChild(title);
-            div.appendChild(plot);
-            grid.appendChild(div);
-          });
-          section.appendChild(grid);
-          charts.appendChild(section);
-        });
-      }
 
-      function renderCharts(seriesData) {
-        const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#e377c2', '#8c564b'];
-        const seriesNames = Object.keys(seriesData);
-        seriesNames.forEach((name) => {
-          const traces = (seriesData[name] || []).map((src, i) => ({
-            x: src.x || [],
-            y: src.y || [],
+        if (selectedSources.length === 0) {
+          charts.innerHTML = '<p style="color: #888; padding: 40px; text-align: center;">Select data sources from the sidebar</p>';
+          return;
+        }
+
+        if (!seriesData || plots.length === 0) {
+          charts.innerHTML = '<p style="color: #888; padding: 40px; text-align: center;">No plots found</p>';
+          return;
+        }
+
+        const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b'];
+        
+        plots.forEach(plotName => {
+          const data = seriesData[plotName];
+          if (!data) return;
+
+          const chartDiv = document.createElement('div');
+          chartDiv.className = 'chart';
+          chartDiv.style.marginBottom = '16px';
+          
+          const title = document.createElement('h3');
+          title.textContent = plotName;
+          chartDiv.appendChild(title);
+          
+          const plotDiv = document.createElement('div');
+          plotDiv.id = makeId(plotName);
+          plotDiv.style.width = '100%';
+          plotDiv.style.height = '300px';
+          chartDiv.appendChild(plotDiv);
+          
+          charts.appendChild(chartDiv);
+
+          const traces = data.map((srcData, idx) => ({
+            x: srcData.x || [],
+            y: srcData.y || [],
             mode: 'lines',
-            name: sourceLabels[i] || `src ${i}`,
-            line: { color: colors[i % colors.length], width: 1.5 }
+            name: seriesData._sources ? seriesData._sources[idx] : `Source ${idx}`,
+            line: { color: colors[idx % colors.length], width: 1.5 }
           }));
-          // Apply global source visibility
-          traces.forEach((t, i) => {
-            if (!globalSourceEnabled[i]) {
-              t.visible = 'legendonly';
-            }
-          });
+
           const layout = {
-            margin: { l: 40, r: 10, t: 10, b: 30 },
-            showlegend: true,
+            margin: { l: 50, r: 20, t: 10, b: 40 },
+            showlegend: traces.length > 1,
             legend: { orientation: 'h' },
-            xaxis: { title: 'step_id + offset' },
-            yaxis: { title: name }
+            xaxis: { gridcolor: '#3e3e42', zerolinecolor: '#3e3e42' },
+            yaxis: { gridcolor: '#3e3e42', zerolinecolor: '#3e3e42' },
+            paper_bgcolor: '#252526',
+            plot_bgcolor: '#1e1e1e',
+            font: { color: '#cccccc', size: 11 }
           };
-          Plotly.react(makeId(name), traces, layout, { responsive: true });
+
+          Plotly.newPlot(plotDiv.id, traces, layout, { responsive: true });
         });
       }
 
-      function initSourceToggles() {
-        const container = document.getElementById('source-toggles');
-        container.querySelectorAll('.src-toggle').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const idx = parseInt(btn.getAttribute('data-index'), 10);
-            if (!Number.isFinite(idx)) return;
-            globalSourceEnabled[idx] = !globalSourceEnabled[idx];
-            btn.classList.toggle('src-off', !globalSourceEnabled[idx]);
-            // Re-render with current data and offsets
-            const offsets = getOffsets();
-            const starts = getStarts();
-            const ends = getEnds();
-            fetchDataWithOffsets(offsets, starts, ends).then((data) => {
-              lastSeriesData = data.series_data;
-              rerenderWithFilter();
-            });
-          });
-        });
-      }
+      // Load data for selected sources only
+      async function loadData() {
+        updateSourceCount();
+        
+        if (selectedSources.length === 0) {
+          seriesData = null;
+          allSeries = [];
+          render();
+          return;
+        }
 
-      async function refresh() {
         try {
-          showStatus('Loading...');
-          const offsets = getOffsets();
-          const starts = getStarts();
-          const ends = getEnds();
-          const data = await fetchDataWithOffsets(offsets, starts, ends);
-          lastSeriesData = data.series_data;
-          rerenderWithFilter();
-          showStatus('');
+          document.getElementById('status').textContent = 'Loading...';
+          const resp = await fetch('/data?sources=' + selectedSources.join(','));
+          const data = await resp.json();
+          seriesData = data.series_data;
+          seriesData._sources = data.sources; // Store source labels
+          allSeries = data.series || [];
+          render();
+          document.getElementById('status').textContent = '';
         } catch (err) {
           console.error(err);
-          showStatus('Error loading data');
+          document.getElementById('status').textContent = 'Error';
         }
       }
 
-      document.getElementById('apply').addEventListener('click', refresh);
+      // Check for new source files
+      async function checkUpdates() {
+        try {
+          const resp = await fetch('/sources');
+          const data = await resp.json();
+          if (JSON.stringify(data.sources) !== JSON.stringify(sourceLabels)) {
+            sourceLabels = data.sources;
+            buildSourceList();
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
 
-      // init
-      buildOffsetControls();
-      // build chart shells first (filtered if any search typed before fetch)
-      rerenderWithFilter();
-      // Hook up search box
-      document.getElementById('search').addEventListener('input', (e) => {
-        searchQuery = e.target.value || '';
-        if (searchDebounceHandle) clearTimeout(searchDebounceHandle);
-        searchDebounceHandle = setTimeout(() => {
-          rerenderWithFilter();
-        }, 120);
-      });
-      initSourceToggles();
-      refresh();
+      // Initialize
+      buildSourceList();
+      render();
+
+      // Search
+      let searchTimeout;
+      document.getElementById('plot-search').oninput = (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          plotSearchQuery = e.target.value.trim();
+          render();
+        }, 100);
+      };
+
+      // Clear all button
+      document.getElementById('deselect-all-sources').onclick = () => {
+        selectedSources = [];
+        buildSourceList();
+        loadData();
+      };
+
+      document.getElementById('refresh-btn').onclick = loadData;
+
+      // Poll for new files every 5 seconds
+      setInterval(checkUpdates, 5000);
     </script>
   </body>
 </html>
