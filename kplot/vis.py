@@ -13,11 +13,7 @@ DATA_DIR = ""
 
 
 def scan_sources() -> List['DataSource']:
-    """Return all available data sources discovered under DATA_DIR.
-
-    Simple one-pass scan with clear sorting: by robot name, then directory mtime.
-    """
-    print(DATA_DIR, flush=True)
+    """Returns list of data sources discovered under DATA_DIR. """
     if not DATA_DIR or not os.path.isdir(DATA_DIR):
         return []
 
@@ -33,25 +29,20 @@ def scan_sources() -> List['DataSource']:
 
         robot_name, run_dir = parts[0], parts[1]
         label = f"{robot_name} | {run_dir}"
-        search_text = f"{robot_name} {run_dir}".lower()
         dir_path = os.path.join(DATA_DIR, robot_name, run_dir)
-        try:
-            mtime = os.path.getmtime(dir_path)
-        except Exception:
-            mtime = 0
+        mtime = os.path.getmtime(dir_path)
 
-        discovered.append((robot_name, mtime, DataSource(label, ndjson_path, search_text)))
+        discovered.append((mtime, DataSource(label, ndjson_path)))
 
-    # Sort by robot, then by directory modification time (earliest first)
-    discovered.sort(key=lambda item: (item[0], item[1]))
-    return [ds for _, __, ds in discovered]
+    discovered.sort(key=lambda item: item[0], reverse=True)
+    return [ds for _, ds in discovered]
 
 
 class DataSource:
-    def __init__(self, label: str, path: str, search_text: str = "") -> None:
+    def __init__(self, label: str, path: str) -> None:
         self.label = label
+        self.search_text = label.lower()
         self.path = path
-        self.search_text = search_text or label.lower()
         self.series_to_points: Dict[str, List[Tuple[int, float]]] = {}
         self.loaded = False
 
