@@ -27,6 +27,10 @@ def scan_sources() -> List['DataSource']:
         if len(parts) < 3 or parts[-1] != "kinfer_log.ndjson":
             continue
 
+        filesize = os.path.getsize(ndjson_path)
+        if filesize == 0:
+            continue
+
         robot_name, run_dir = parts[0], parts[1]
         label = f"{robot_name} | {run_dir}"
         dir_path = os.path.join(DATA_DIR, robot_name, run_dir)
