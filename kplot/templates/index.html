@@ -321,6 +321,13 @@
           lbl.style.fontFamily = 'monospace';
           lbl.style.fontSize = '12px';
           
+          // Toggle when clicking the row (but not the checkbox or label)
+          item.addEventListener('click', (e) => {
+            if (e.target !== cb && e.target !== lbl) {
+              cb.click();
+            }
+          });
+
           item.appendChild(cb);
           item.appendChild(lbl);
           list.appendChild(item);
