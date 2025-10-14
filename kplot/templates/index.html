@@ -157,12 +157,7 @@
         display: block;
       }
       #charts.panes {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
-        gap: 16px;
-      }
-      #charts.panes .chart {
-        margin: 0; /* Grid handles spacing */
+        display: block; /* category grids handle layout in panes mode */
       }
       .category { 
         margin: 0 0 24px;
@@ -179,6 +174,9 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
         gap: 16px;
+      }
+      .category-grid .chart {
+        margin: 0; /* Grid handles spacing */
       }
       .chart { 
         border: 1px solid #3e3e42;
@@ -242,7 +240,10 @@
         <header>
           <input type="text" id="plot-search" placeholder="Search plots..." style="padding: 6px 12px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 3px; color: #cccccc; font-size: 13px; min-width: 300px; outline: none;" />
           <button id="refresh-btn">Refresh</button>
-          <button id="layout-toggle-btn" title="Toggle layout mode">Layout: Full</button>
+          <label class="control-group" title="Toggle layout mode">
+            <input type="checkbox" id="layout-toggle" checked />
+            <span>Panes layout</span>
+          </label>
           <span id="status"></span>
         </header>
         <main class="charts-container">
@@ -259,7 +260,7 @@
       let seriesData = null;
       let plotSearchQuery = '';
       let sourceSearchQuery = '';
-      let layoutMode = 'full'; // 'full' or 'panes'
+      let layoutMode = 'panes'; // 'full' or 'panes'
 
       function makeId(name) {
         return 'chart-' + name.replace(/[^a-zA-Z0-9_\-]/g, '_');
@@ -348,6 +349,21 @@
         });
       }
 
+      // Determine category for a plot name
+      function getCategory(plotName) {
+        if (plotName.startsWith('action.')) return 'Actions';
+        if (plotName.startsWith('joint_angles.')) return 'Joint Angles';
+        if (plotName.startsWith('joint_velocities.')) return 'Joint Velocities';
+        if (plotName.startsWith('joint_torques.')) return 'Joint Torques';
+        if (plotName.startsWith('joint_amps.')) return 'Joint Currents';
+        if (plotName.startsWith('joint_temps.')) return 'Joint Temperatures';
+        if (plotName.startsWith('projected_gravity.')) return 'Projected Gravity';
+        if (plotName.startsWith('gyro.') || plotName.startsWith('gyroscope.')) return 'Gyroscope';
+        if (plotName.startsWith('command.') || plotName.startsWith('commands.') || plotName.startsWith('cmd.')) return 'Commands';
+        if (plotName.startsWith('output.')) return 'Outputs';
+        return 'Other';
+      }
+
       // Render charts
       function render() {
         const plots = getFilteredPlots();
@@ -369,50 +385,96 @@
         }
 
         const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b'];
-        
-        plots.forEach(plotName => {
-          const data = seriesData[plotName];
-          if (!data) return;
 
-          const chartDiv = document.createElement('div');
-          chartDiv.className = 'chart';
-          if (layoutMode === 'full') {
-            chartDiv.style.marginBottom = '16px';
-          }
-          
-          const title = document.createElement('h3');
-          title.textContent = plotName;
-          chartDiv.appendChild(title);
-          
-          const plotDiv = document.createElement('div');
-          plotDiv.id = makeId(plotName);
-          plotDiv.style.width = '100%';
-          plotDiv.style.height = '300px';
-          chartDiv.appendChild(plotDiv);
-          
-          charts.appendChild(chartDiv);
-
-          const traces = data.map((srcData, idx) => ({
-            x: srcData.x || [],
-            y: srcData.y || [],
-            mode: 'lines',
-            name: seriesData._sources ? seriesData._sources[idx] : `Source ${idx}`,
-            line: { color: colors[idx % colors.length], width: 1.5 }
-          }));
-
-          const layout = {
-            margin: { l: 50, r: 20, t: 10, b: 40 },
-            showlegend: traces.length > 1,
-            legend: { orientation: 'h' },
-            xaxis: { gridcolor: '#3e3e42', zerolinecolor: '#3e3e42' },
-            yaxis: { gridcolor: '#3e3e42', zerolinecolor: '#3e3e42' },
-            paper_bgcolor: '#252526',
-            plot_bgcolor: '#1e1e1e',
-            font: { color: '#cccccc', size: 11 }
-          };
-
-          Plotly.newPlot(plotDiv.id, traces, layout, { responsive: true });
+        // Group plots by category
+        const grouped = {};
+        plots.forEach(name => {
+          const cat = getCategory(name);
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push(name);
         });
+
+        const categoryOrder = [
+          'Actions',
+          'Joint Angles',
+          'Joint Velocities',
+          'Joint Torques',
+          'Joint Currents',
+          'Joint Temperatures',
+          'Projected Gravity',
+          'Gyroscope',
+          'Commands',
+          'Other'
+        ];
+
+        function renderCategory(category, names) {
+          if (names.length === 0) return;
+          const catDiv = document.createElement('div');
+          catDiv.className = 'category';
+          const h2 = document.createElement('h2');
+          h2.textContent = category;
+          catDiv.appendChild(h2);
+          const container = document.createElement('div');
+          if (layoutMode === 'panes') container.className = 'category-grid';
+          catDiv.appendChild(container);
+          charts.appendChild(catDiv);
+
+          names.forEach(plotName => {
+            const data = seriesData[plotName];
+            if (!data) return;
+
+            const chartDiv = document.createElement('div');
+            chartDiv.className = 'chart';
+            if (layoutMode === 'full') {
+              chartDiv.style.marginBottom = '16px';
+            }
+
+            const title = document.createElement('h3');
+            title.textContent = plotName;
+            chartDiv.appendChild(title);
+
+            const plotDiv = document.createElement('div');
+            plotDiv.id = makeId(plotName);
+            plotDiv.style.width = '100%';
+            plotDiv.style.height = '300px';
+            chartDiv.appendChild(plotDiv);
+
+            container.appendChild(chartDiv);
+
+            const traces = data.map((srcData, idx) => ({
+              x: srcData.x || [],
+              y: srcData.y || [],
+              mode: 'lines',
+              name: seriesData._sources ? seriesData._sources[idx] : `Source ${idx}`,
+              line: { color: colors[idx % colors.length], width: 1.5 }
+            }));
+
+            const layout = {
+              margin: { l: 50, r: 20, t: 10, b: 40 },
+              showlegend: traces.length > 1,
+              legend: { orientation: 'h' },
+              xaxis: { gridcolor: '#3e3e42', zerolinecolor: '#3e3e42' },
+              yaxis: { gridcolor: '#3e3e42', zerolinecolor: '#3e3e42' },
+              paper_bgcolor: '#252526',
+              plot_bgcolor: '#1e1e1e',
+              font: { color: '#cccccc', size: 11 }
+            };
+
+            Plotly.newPlot(plotDiv.id, traces, layout, { responsive: true });
+          });
+        }
+
+        // Render known categories in order
+        categoryOrder.forEach(category => {
+          renderCategory(category, grouped[category] || []);
+        });
+
+        // Render any remaining categories not in the predefined order
+        Object.keys(grouped)
+          .filter(cat => !categoryOrder.includes(cat))
+          .forEach(cat => {
+            renderCategory(cat, grouped[cat]);
+          });
       }
 
       // Load data for selected sources only
@@ -489,11 +551,11 @@
 
       document.getElementById('refresh-btn').onclick = loadData;
 
-      // Layout toggle button
-      const layoutBtn = document.getElementById('layout-toggle-btn');
-      layoutBtn.onclick = () => {
-        layoutMode = layoutMode === 'full' ? 'panes' : 'full';
-        layoutBtn.textContent = 'Layout: ' + (layoutMode === 'full' ? 'Full' : 'Panes');
+      // Layout toggle checkbox
+      const layoutToggle = document.getElementById('layout-toggle');
+      layoutToggle.checked = layoutMode === 'panes';
+      layoutToggle.onchange = () => {
+        layoutMode = layoutToggle.checked ? 'panes' : 'full';
         render();
       };
 
