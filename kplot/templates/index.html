@@ -216,7 +216,8 @@
       <aside class="sidebar">
         <div class="sidebar-header">
           <strong style="font-size: 13px; display: block; margin-bottom: 8px;">Data Sources</strong>
-          <span id="source-count" style="font-size: 11px; color: #888;"></span>
+          <input type="text" id="source-search" class="sidebar-search" placeholder="Search sources..." />
+          <span id="source-count" style="font-size: 11px; color: #888; display: block; margin-top: 8px;"></span>
         </div>
         <button class="select-all-btn" id="deselect-all-sources">Clear All</button>
         <div class="series-list" id="source-list">
@@ -239,10 +240,12 @@
 
     <script>
       let sourceLabels = {{ source_labels_json | safe }};
+      let searchTexts = {{ search_texts_json | safe }};
       let selectedSources = []; // Indices of selected sources
       let allSeries = [];
       let seriesData = null;
       let plotSearchQuery = '';
+      let sourceSearchQuery = '';
 
       function makeId(name) {
         return 'chart-' + name.replace(/[^a-zA-Z0-9_\-]/g, '_');
@@ -252,7 +255,32 @@
       function buildSourceList() {
         const list = document.getElementById('source-list');
         list.innerHTML = '';
+        
+        const terms = sourceSearchQuery.toLowerCase().split(/\s+/).filter(t => t);
+        let currentRobot = '';
+        let visibleCount = 0;
+        
         sourceLabels.forEach((label, idx) => {
+          // Filter by search query (AND logic for multiple terms)
+          if (terms.length > 0 && !terms.every(term => searchTexts[idx].includes(term))) {
+            return;
+          }
+          
+          visibleCount++;
+          
+          // Extract robot name for grouping
+          const robotName = label.split(' | ')[0];
+          
+          // Add robot header if new robot
+          if (robotName !== currentRobot) {
+            currentRobot = robotName;
+            const header = document.createElement('div');
+            header.className = 'series-category-title';
+            header.textContent = robotName;
+            header.style.marginTop = visibleCount > 1 ? '12px' : '0';
+            list.appendChild(header);
+          }
+          
           const item = document.createElement('div');
           item.className = 'series-item';
           
@@ -271,13 +299,21 @@
           
           const lbl = document.createElement('label');
           lbl.htmlFor = cb.id;
-          lbl.textContent = label;
+          // Show only the policy part (after " | ")
+          const policyPart = label.split(' | ')[1] || label;
+          lbl.textContent = policyPart;
           lbl.style.cursor = 'pointer';
+          lbl.style.fontFamily = 'monospace';
+          lbl.style.fontSize = '12px';
           
           item.appendChild(cb);
           item.appendChild(lbl);
           list.appendChild(item);
         });
+        
+        if (visibleCount === 0) {
+          list.innerHTML = '<div style="padding: 16px; color: #888; text-align: center; font-size: 12px;">No sources found</div>';
+        }
         
         updateSourceCount();
       }
@@ -290,8 +326,12 @@
       // Get filtered plot names based on search
       function getFilteredPlots() {
         if (!plotSearchQuery) return allSeries;
-        const q = plotSearchQuery.toLowerCase();
-        return allSeries.filter(s => s.toLowerCase().includes(q));
+        const terms = plotSearchQuery.toLowerCase().split(/\s+/).filter(t => t);
+        if (terms.length === 0) return allSeries;
+        return allSeries.filter(s => {
+          const lower = s.toLowerCase();
+          return terms.every(term => lower.includes(term));
+        });
       }
 
       // Render charts
@@ -388,6 +428,7 @@
           const data = await resp.json();
           if (JSON.stringify(data.sources) !== JSON.stringify(sourceLabels)) {
             sourceLabels = data.sources;
+            searchTexts = data.search_texts || sourceLabels.map(s => s.toLowerCase());
             buildSourceList();
           }
         } catch (err) {
@@ -399,11 +440,21 @@
       buildSourceList();
       render();
 
-      // Search
-      let searchTimeout;
+      // Source search
+      let sourceSearchTimeout;
+      document.getElementById('source-search').oninput = (e) => {
+        clearTimeout(sourceSearchTimeout);
+        sourceSearchTimeout = setTimeout(() => {
+          sourceSearchQuery = e.target.value.trim();
+          buildSourceList();
+        }, 150);
+      };
+
+      // Plot search
+      let plotSearchTimeout;
       document.getElementById('plot-search').oninput = (e) => {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
+        clearTimeout(plotSearchTimeout);
+        plotSearchTimeout = setTimeout(() => {
           plotSearchQuery = e.target.value.trim();
           render();
         }, 100);

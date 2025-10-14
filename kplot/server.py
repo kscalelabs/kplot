@@ -2,59 +2,53 @@
 """Simple server launcher for kplot visualization."""
 
 import argparse
-import os
 import sys
 from pathlib import Path
-
-from kplot.vis import app
+from kplot.vis import app, scan_sources, DATA_DIR
 
 
 def main() -> None:
+    """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Launch kplot server to visualize kinfer logs",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--data-dir",
+        "--data-dir", 
         type=str,
         default="~/robot_telemetry",
-        help="Path to robot telemetry data directory",
+        help="Path to robot telemetry data directory"
     )
     parser.add_argument(
         "--port",
-        type=int,
+        type=int, 
         default=5001,
-        help="Port to run the server on",
+        help="Port to run the server on"
     )
     parser.add_argument(
         "--host",
         type=str,
-        default="0.0.0.0",
-        help="Host to bind to",
+        default="0.0.0.0", 
+        help="Host to bind to"
     )
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Run in debug mode",
+        help="Run in debug mode"
     )
-
     args = parser.parse_args()
 
-    # Expand user path and resolve
     data_dir = Path(args.data_dir).expanduser().resolve()
-
     if not data_dir.exists():
         print(f"Error: Data directory does not exist: {data_dir}", file=sys.stderr)
         sys.exit(1)
 
+    # Set data directory and scan sources
+    global DATA_DIR
+    DATA_DIR = str(data_dir)
+    sources = scan_sources()
+
     print(f"Loading data from: {data_dir}")
-
-    # Set data directory
-    from kplot import vis
-
-    vis.DATA_DIR = str(data_dir)
-    
-    sources = vis.scan_sources()
     print(f"Found {len(sources)} data sources")
     print("Data will be loaded on-demand when sources are selected")
     print(f"\nStarting server at http://{args.host}:{args.port}")
@@ -65,4 +59,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

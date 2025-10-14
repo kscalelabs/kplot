@@ -13,24 +13,54 @@ DATA_DIR = ""
 
 
 def scan_sources() -> List['DataSource']:
-    """Scan DATA_DIR for .ndjson files and return DataSource list."""
+    """Scan DATA_DIR for kinfer_log.ndjson files and return DataSource list."""
     if not DATA_DIR or not os.path.isdir(DATA_DIR):
         return []
     
-    sources = []
-    for path in glob.glob(os.path.join(DATA_DIR, "**", "*.ndjson"), recursive=True):
-        label = os.path.relpath(path, DATA_DIR)
-        sources.append(DataSource(label, path))
-
-    print(sources, flush=True)
+    # Group sources by robot name
+    robot_sources: Dict[str, List[Tuple[str, str, float, str]]] = {}
     
-    return sorted(sources, key=lambda s: s.label)
+    for path in glob.glob(os.path.join(DATA_DIR, "**", "kinfer_log.ndjson"), recursive=True):
+        rel_path = os.path.relpath(path, DATA_DIR)
+        parts = rel_path.split(os.sep)
+        
+        # Structure: robot_name/run_dir/kinfer_log.ndjson
+        if len(parts) >= 3 and parts[-1] == "kinfer_log.ndjson":
+            robot_name = parts[0]
+            run_dir = parts[1]
+            
+            # Get directory modification time
+            dir_path = os.path.join(DATA_DIR, robot_name, run_dir)
+            try:
+                mtime = os.path.getmtime(dir_path)
+            except:
+                mtime = 0
+            
+            search_text = f"{robot_name} {run_dir}".lower()
+            
+            if robot_name not in robot_sources:
+                robot_sources[robot_name] = []
+            robot_sources[robot_name].append((run_dir, search_text, mtime, path))
+    
+    # Build final source list: sorted by robot, then by modification time
+    sources = []
+    for robot_name in sorted(robot_sources.keys()):
+        runs = robot_sources[robot_name]
+        # Sort by modification time (earliest first)
+        runs.sort(key=lambda x: x[2])
+        
+        for run_dir, search_text, mtime, path in runs:
+            label = f"{robot_name} | {run_dir}"
+            sources.append(DataSource(label, path, search_text))
+    
+    return sources
 
 
 class DataSource:
-    def __init__(self, label: str, path: str) -> None:
+    def __init__(self, label: str, path: str, search_text: str = "") -> None:
         self.label = label
         self.path = path
+        self.search_text = search_text or label.lower()
         self.series_to_points: Dict[str, List[Tuple[int, float]]] = {}
         self.loaded = False
 
@@ -115,10 +145,12 @@ def extract_series(record: Dict[str, Any], joint_names: List[str]) -> Dict[str, 
 def index() -> str:
     sources = scan_sources()
     labels = [s.label for s in sources]
+    search_texts = [s.search_text for s in sources]
     return render_template(
         "index.html",
         source_labels=enumerate(labels),
         source_labels_json=json.dumps(labels),
+        search_texts_json=json.dumps(search_texts),
         all_series_json=json.dumps([]),
     )
 
@@ -127,7 +159,10 @@ def index() -> str:
 def list_sources() -> str:
     """Return list of available data sources."""
     sources = scan_sources()
-    return jsonify({"sources": [s.label for s in sources]})
+    return jsonify({
+        "sources": [s.label for s in sources],
+        "search_texts": [s.search_text for s in sources]
+    })
 
 
 @app.route("/data")
