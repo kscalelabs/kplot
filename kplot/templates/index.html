@@ -152,6 +152,18 @@
         overflow-y: auto;
         padding: 16px;
       }
+      /* Layout modes for charts area */
+      #charts.full {
+        display: block;
+      }
+      #charts.panes {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+        gap: 16px;
+      }
+      #charts.panes .chart {
+        margin: 0; /* Grid handles spacing */
+      }
       .category { 
         margin: 0 0 24px;
       }
@@ -230,6 +242,7 @@
         <header>
           <input type="text" id="plot-search" placeholder="Search plots..." style="padding: 6px 12px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 3px; color: #cccccc; font-size: 13px; min-width: 300px; outline: none;" />
           <button id="refresh-btn">Refresh</button>
+          <button id="layout-toggle-btn" title="Toggle layout mode">Layout: Full</button>
           <span id="status"></span>
         </header>
         <main class="charts-container">
@@ -246,6 +259,7 @@
       let seriesData = null;
       let plotSearchQuery = '';
       let sourceSearchQuery = '';
+      let layoutMode = 'full'; // 'full' or 'panes'
 
       function makeId(name) {
         return 'chart-' + name.replace(/[^a-zA-Z0-9_\-]/g, '_');
@@ -340,6 +354,10 @@
         const charts = document.getElementById('charts');
         charts.innerHTML = '';
 
+        // Apply layout class
+        charts.classList.remove('full', 'panes');
+        charts.classList.add(layoutMode === 'panes' ? 'panes' : 'full');
+
         if (selectedSources.length === 0) {
           charts.innerHTML = '<p style="color: #888; padding: 40px; text-align: center;">Select data sources from the sidebar</p>';
           return;
@@ -358,7 +376,9 @@
 
           const chartDiv = document.createElement('div');
           chartDiv.className = 'chart';
-          chartDiv.style.marginBottom = '16px';
+          if (layoutMode === 'full') {
+            chartDiv.style.marginBottom = '16px';
+          }
           
           const title = document.createElement('h3');
           title.textContent = plotName;
@@ -468,6 +488,14 @@
       };
 
       document.getElementById('refresh-btn').onclick = loadData;
+
+      // Layout toggle button
+      const layoutBtn = document.getElementById('layout-toggle-btn');
+      layoutBtn.onclick = () => {
+        layoutMode = layoutMode === 'full' ? 'panes' : 'full';
+        layoutBtn.textContent = 'Layout: ' + (layoutMode === 'full' ? 'Full' : 'Panes');
+        render();
+      };
 
     </script>
   </body>
