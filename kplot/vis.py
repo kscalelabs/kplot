@@ -1,130 +1,49 @@
 import os
 import json
-import glob
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 from flask import Flask, jsonify, request, render_template
+from .source_cache import SourceCache, DataSource
 
 
 app = Flask(__name__)
 
 
-# Data directory set by server.py
-DATA_DIR = ""
+# Global source cache (initialized by server.py)
+_source_cache: Optional[SourceCache] = None
 
 
-def scan_sources() -> List['DataSource']:
-    """Returns list of data sources discovered under DATA_DIR. """
-    if not DATA_DIR or not os.path.isdir(DATA_DIR):
-        return []
-
-    discovered: List[Tuple[str, float, DataSource]] = []
-
-    for ndjson_path in glob.glob(os.path.join(DATA_DIR, "**", "kinfer_log.ndjson"), recursive=True):
-        rel_path = os.path.relpath(ndjson_path, DATA_DIR)
-        parts = rel_path.split(os.sep)
-
-        # Expect: robot_name/run_dir/kinfer_log.ndjson
-        if len(parts) < 3 or parts[-1] != "kinfer_log.ndjson":
-            continue
-
-        filesize = os.path.getsize(ndjson_path)
-        if filesize == 0:
-            continue
-
-        robot_name, run_dir = parts[0], parts[1]
-        label = f"{robot_name} | {run_dir}"
-        dir_path = os.path.join(DATA_DIR, robot_name, run_dir)
-        mtime = os.path.getmtime(dir_path)
-
-        discovered.append((mtime, DataSource(label, ndjson_path)))
-
-    discovered.sort(key=lambda item: item[0], reverse=True)
-    return [ds for _, ds in discovered]
-
-
-class DataSource:
-    def __init__(self, label: str, path: str) -> None:
-        self.label = label
-        self.search_text = label.lower()
-        self.path = path
-        self.series_to_points: Dict[str, List[Tuple[int, float]]] = {}
-        self.loaded = False
-
-    def load(self) -> None:
-        """Load data from file on-demand."""
-        if self.loaded:
-            return
+def init_cache(data_dir: str) -> SourceCache:
+    """Initialize and start the source cache with file watching.
+    
+    Args:
+        data_dir: Path to the data directory to watch
         
-        try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                joint_names: List[str] = []
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        record = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    
-                    if not isinstance(record, dict):
-                        continue
-                    
-                    if isinstance(record.get("joint_order"), list):
-                        joint_names = [str(x) for x in record["joint_order"]]
-                    
-                    step_id = record.get("step_id")
-                    if step_id is None:
-                        continue
-                    if not isinstance(step_id, int):
-                        try:
-                            step_id = int(step_id)
-                        except Exception:
-                            continue
-                    
-                    for name, value in extract_series(record, joint_names).items():
-                        if name not in self.series_to_points:
-                            self.series_to_points[name] = []
-                        self.series_to_points[name].append((step_id, value))
-            
-            # Sort points
-            for points in self.series_to_points.values():
-                points.sort(key=lambda p: p[0])
-            
-            self.loaded = True
-        except Exception as e:
-            print(f"Error loading {self.path}: {e}")
+    Returns:
+        The initialized SourceCache instance
+    """
+    global _source_cache
+    _source_cache = SourceCache(data_dir)
+    _source_cache.start_watching()
+    return _source_cache
 
 
-def is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def extract_series(record: Dict[str, Any], joint_names: List[str]) -> Dict[str, float]:
-    """Extract all numeric series from a record."""
-    series: Dict[str, float] = {}
+def get_cache() -> Optional[SourceCache]:
+    """Get the current source cache instance.
     
-    JOINTED_KEYS = {"joint_angles", "joint_velocities", "joint_amps", "joint_torques", 
-                    "joint_temps", "output", "action"}
+    Returns:
+        The SourceCache instance or None if not initialized
+    """
+    return _source_cache
+
+
+def scan_sources() -> List[DataSource]:
+    """Returns list of data sources from the cache.
     
-    for key, value in record.items():
-        if value is None or key == "step_id":
-            continue
-            
-        if is_number(value):
-            series[key] = float(value)
-        elif isinstance(value, list):
-            if key in JOINTED_KEYS:
-                for idx, v in enumerate(value):
-                    if is_number(v):
-                        joint_name = joint_names[idx] if idx < len(joint_names) else f"idx{idx}"
-                        series[f"{key}.{joint_name}"] = float(v)
-            else:
-                for idx, v in enumerate(value):
-                    if is_number(v):
-                        series[f"{key}[{idx}]"] = float(v)
-    
-    return series
+    Uses the in-memory cache instead of scanning the disk each time.
+    """
+    if _source_cache is None:
+        return []
+    return _source_cache.get_sources()
 
 
 @app.route("/")

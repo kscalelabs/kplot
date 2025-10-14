@@ -43,18 +43,22 @@ def main() -> None:
         print(f"Error: Data directory does not exist: {data_dir}", file=sys.stderr)
         sys.exit(1)
 
-    # Configure vis module and scan for sources
-    vis.DATA_DIR = str(data_dir)
-    sources = vis.scan_sources()
-
+    # Initialize the source cache with file watching
+    cache = vis.init_cache(str(data_dir))
+    sources = cache.get_sources()
 
     print(f"Loading data from: {data_dir}")
     print(f"Found {len(sources)} data sources")
     print("Data will be loaded on-demand when sources are selected")
+    print("File watcher is active - new files will be detected automatically")
     print(f"\nStarting server at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop")
 
-    vis.app.run(host=args.host, port=args.port, debug=args.debug)
+    try:
+        vis.app.run(host=args.host, port=args.port, debug=args.debug)
+    finally:
+        # Clean up the file watcher on shutdown
+        cache.stop_watching()
 
 
 if __name__ == "__main__":
