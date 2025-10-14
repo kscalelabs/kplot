@@ -49,14 +49,13 @@ def main() -> None:
 
     print(f"Loading data from: {data_dir}")
 
-    # Scan for data sources from the specified directory
+    # Set data directory
     from kplot import vis
 
-    vis.DATA_DIR = str(data_dir)  # Set the data directory for rescan
-    vis.DATA_SOURCES = vis.scan_data_sources(str(data_dir))
-    vis.SOURCE_LABELS = [ds.label for ds in vis.DATA_SOURCES]
-
-    print(f"Found {len(vis.DATA_SOURCES)} data sources")
+    vis.DATA_DIR = str(data_dir)
+    
+    sources = vis.scan_sources()
+    print(f"Found {len(sources)} data sources")
     print("Data will be loaded on-demand when sources are selected")
     print(f"\nStarting server at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop")

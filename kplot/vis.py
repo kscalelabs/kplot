@@ -1,11 +1,30 @@
 import os
 import json
 import glob
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any
 from flask import Flask, jsonify, request, render_template
 
 
 app = Flask(__name__)
+
+
+# Data directory set by server.py
+DATA_DIR = ""
+
+
+def scan_sources() -> List['DataSource']:
+    """Scan DATA_DIR for .ndjson files and return DataSource list."""
+    if not DATA_DIR or not os.path.isdir(DATA_DIR):
+        return []
+    
+    sources = []
+    for path in glob.glob(os.path.join(DATA_DIR, "**", "*.ndjson"), recursive=True):
+        label = os.path.relpath(path, DATA_DIR)
+        sources.append(DataSource(label, path))
+
+    print(sources, flush=True)
+    
+    return sorted(sources, key=lambda s: s.label)
 
 
 class DataSource:
@@ -92,63 +111,28 @@ def extract_series(record: Dict[str, Any], joint_names: List[str]) -> Dict[str, 
     return series
 
 
-def scan_data_sources(root_dir: str) -> List[DataSource]:
-    """Scan for .ndjson files without loading them."""
-    data_dir = os.path.join(root_dir, "data") if os.path.isdir(os.path.join(root_dir, "data")) else root_dir
-    
-    if not os.path.isdir(data_dir):
-        return []
-    
-    ndjson_paths = sorted(set(glob.glob(os.path.join(data_dir, "**", "*.ndjson"), recursive=True)))
-    data_sources: List[DataSource] = []
-
-    for path in ndjson_paths:
-        try:
-            label = os.path.relpath(path, data_dir)
-        except Exception:
-            label = os.path.basename(path)
-        
-        data_sources.append(DataSource(label=label, path=path))
-
-    return data_sources
-
-
-# Global state
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = ROOT_DIR
-DATA_SOURCES = scan_data_sources(ROOT_DIR)
-SOURCE_LABELS = [ds.label for ds in DATA_SOURCES]
-
-
-def rescan_sources() -> None:
-    """Rescan for new files."""
-    global DATA_SOURCES, SOURCE_LABELS
-    DATA_SOURCES = scan_data_sources(DATA_DIR)
-    SOURCE_LABELS = [ds.label for ds in DATA_SOURCES]
-
-
 @app.route("/")
 def index() -> str:
+    sources = scan_sources()
+    labels = [s.label for s in sources]
     return render_template(
         "index.html",
-        source_labels=enumerate(SOURCE_LABELS),
-        source_labels_json=json.dumps(SOURCE_LABELS),
-        all_series_json=json.dumps([]),  # No series until sources are loaded
+        source_labels=enumerate(labels),
+        source_labels_json=json.dumps(labels),
+        all_series_json=json.dumps([]),
     )
 
 
 @app.route("/sources")
 def list_sources() -> str:
     """Return list of available data sources."""
-    if DATA_DIR != ROOT_DIR and os.path.exists(DATA_DIR):
-        rescan_sources()
-    return jsonify({"sources": SOURCE_LABELS})
+    sources = scan_sources()
+    return jsonify({"sources": [s.label for s in sources]})
 
 
 @app.route("/data")
 def data() -> str:
     """Return data for selected sources only."""
-    # Get selected source indices
     selected_raw = request.args.get("sources", "")
     if not selected_raw:
         return jsonify({"sources": [], "series_data": {}})
@@ -158,11 +142,12 @@ def data() -> str:
     except Exception:
         return jsonify({"sources": [], "series_data": {}})
     
-    # Load only selected sources
+    # Scan and get selected sources
+    all_sources = scan_sources()
     selected_sources = []
     for idx in selected_indices:
-        if 0 <= idx < len(DATA_SOURCES):
-            ds = DATA_SOURCES[idx]
+        if 0 <= idx < len(all_sources):
+            ds = all_sources[idx]
             ds.load()
             selected_sources.append(ds)
     
