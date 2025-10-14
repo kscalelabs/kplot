@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kinfer NDJSON Viewer</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 0 16px; }
+      header { position: sticky; top: 0; background: #fff; padding: 12px 0; z-index: 10; border-bottom: 1px solid #eee; }
+      .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+      .control-group { display: flex; align-items: center; gap: 6px; }
+      .charts { padding: 16px 0 36px; }
+      .category { margin: 20px 0 24px; }
+      .category h2 { margin: 0 0 10px; font-size: 16px; font-weight: 700; color: #333; }
+      .category-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 18px; }
+      .chart { border: 1px solid #e6e6e6; border-radius: 8px; padding: 8px; background: #fafafa; }
+      .chart h3 { margin: 4px 0 8px; font-size: 14px; font-weight: 600; }
+      input[type=number] { width: 100px; padding: 6px 8px; }
+      button { padding: 8px 12px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; }
+      button:hover { background: #f3f3f3; }
+      .legend-label { display:inline-block; padding:2px 6px; border-radius:4px; border:1px solid #ddd; margin-right:6px; font-size:12px; }
+      .src-toggle { cursor: pointer; }
+      .src-off { opacity: 0.35; }
+      #search { padding: 6px 8px; min-width: 220px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="controls">
+        <div class="control-group"> 
+          <label for="search"><strong>Search:</strong></label>
+          <input id="search" type="text" placeholder="Filter titles..." />
+        </div>
+        <div class="control-group" id="source-toggles">
+          <strong>Sources:</strong>
+          {% for idx, label in source_labels %}
+          <button class="legend-label src-toggle" type="button" data-index="{{ idx }}">{{ idx }}: {{ label }}</button>
+          {% endfor %}
+        </div>
+        <div id="offset-controls" class="control-group"></div>
+        <div class="control-group">
+          <button id="apply">Apply offsets</button>
+          <span id="status"></span>
+        </div>
+      </div>
+    </header>
+    <main>
+      <div id="charts" class="charts"></div>
+    </main>
+
+    <script>
+      const sourceLabels = {{ source_labels_json | safe }};
+      const allSeries = {{ all_series_json | safe }};
+      const categoriesOrder = [
+        'Joint Angles',
+        'Joint Velocities',
+        'Joint Amps',
+        'Joint Torques',
+        'Torque Commands',
+        'Torque Diff',
+        'Joint Temperatures',
+        'Action',
+        'Output',
+        'Commands',
+        'Projected Gravity',
+        'Gyroscope',
+        'Accel',
+        'Quaternion',
+        'Other'
+      ];
+
+      function makeId(name) {
+        return 'chart-' + name.replace(/[^a-zA-Z0-9_\-]/g, '_');
+      }
+
+      function categoryOf(name) {
+        if (name.startsWith('joint_angles.')) return 'Joint Angles';
+        if (name.startsWith('joint_velocities.')) return 'Joint Velocities';
+        if (name.startsWith('joint_amps.')) return 'Joint Amps';
+        if (name.startsWith('joint_torques.')) return 'Joint Torques';
+        if (name.startsWith('torque_commands.')) return 'Torque Commands';
+        if (name.startsWith('torque_diff.')) return 'Torque Diff';
+        if (name.startsWith('joint_temps.')) return 'Joint Temperatures';
+        if (name.startsWith('action.')) return 'Action';
+        if (name.startsWith('output.')) return 'Output';
+        if (name.startsWith('command[')) return 'Commands';
+        if (name.startsWith('projected_gravity[')) return 'Projected Gravity';
+        if (name.startsWith('gyroscope[') || name.startsWith('gyro[')) return 'Gyroscope';
+        if (name.startsWith('accel[')) return 'Accel';
+        if (name.startsWith('quaternion[')) return 'Quaternion';
+        if (name === 'timestamp_us' || name === 't_us') return 'Other';
+        return 'Other';
+      }
+
+      // Global per-source visibility state
+      let globalSourceEnabled = sourceLabels.map(() => true);
+      // Search/filter state and cached data
+      let searchQuery = '';
+      let lastSeriesData = null; // set after first fetch
+      let searchDebounceHandle = null;
+
+      function getFilteredNames(sourceNames) {
+        const q = (searchQuery || '').trim().toLowerCase();
+        if (!q) return sourceNames.slice().sort();
+        return sourceNames.filter((n) => n.toLowerCase().includes(q)).sort();
+      }
+
+      function subsetSeriesData(seriesData, names) {
+        const out = {};
+        names.forEach((n) => { if (seriesData[n]) out[n] = seriesData[n]; });
+        return out;
+      }
+
+      function rerenderWithFilter() {
+        const names = lastSeriesData ? getFilteredNames(Object.keys(lastSeriesData))
+                                    : getFilteredNames(allSeries);
+        ensureChartsExist(names);
+        if (lastSeriesData) {
+          renderCharts(subsetSeriesData(lastSeriesData, names));
+        }
+      }
+
+      function buildOffsetControls() {
+        const container = document.getElementById('offset-controls');
+        container.innerHTML = '';
+        sourceLabels.forEach((label, idx) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'control-group';
+          const labStart = document.createElement('label');
+          labStart.htmlFor = `start-${idx}`;
+          labStart.textContent = `Start ${idx}`;
+          const inputStart = document.createElement('input');
+          inputStart.type = 'number';
+          inputStart.step = '1';
+          inputStart.id = `start-${idx}`;
+          inputStart.placeholder = 'min step';
+
+          const labEnd = document.createElement('label');
+          labEnd.htmlFor = `end-${idx}`;
+          labEnd.textContent = `End ${idx}`;
+          const inputEnd = document.createElement('input');
+          inputEnd.type = 'number';
+          inputEnd.step = '1';
+          inputEnd.id = `end-${idx}`;
+          inputEnd.placeholder = 'max step';
+
+          const labOff = document.createElement('label');
+          labOff.htmlFor = `offset-${idx}`;
+          labOff.textContent = `Offset ${idx}`;
+          const inputOff = document.createElement('input');
+          inputOff.type = 'number';
+          inputOff.step = '1';
+          inputOff.id = `offset-${idx}`;
+          inputOff.value = '0';
+
+          wrap.appendChild(labStart);
+          wrap.appendChild(inputStart);
+          wrap.appendChild(labEnd);
+          wrap.appendChild(inputEnd);
+          wrap.appendChild(labOff);
+          wrap.appendChild(inputOff);
+          container.appendChild(wrap);
+        });
+      }
+
+      function getOffsets() {
+        return sourceLabels.map((_, idx) => {
+          const v = parseInt(document.getElementById(`offset-${idx}`).value || '0', 10);
+          return Number.isFinite(v) ? v : 0;
+        });
+      }
+
+      function getStarts() {
+        return sourceLabels.map((_, idx) => {
+          const raw = document.getElementById(`start-${idx}`).value;
+          const v = raw === '' ? null : parseInt(raw, 10);
+          return Number.isFinite(v) ? v : null;
+        });
+      }
+
+      function getEnds() {
+        return sourceLabels.map((_, idx) => {
+          const raw = document.getElementById(`end-${idx}`).value;
+          const v = raw === '' ? null : parseInt(raw, 10);
+          return Number.isFinite(v) ? v : null;
+        });
+      }
+
+      function showStatus(text) {
+        document.getElementById('status').textContent = text || '';
+      }
+
+      async function fetchDataWithOffsets(offsets, starts, ends) {
+        const params = new URLSearchParams();
+        params.set('o', offsets.join(','));
+        // Encode starts/ends as comma-separated, empty for nulls
+        params.set('s', starts.map(v => (v === null ? '' : String(v))).join(','));
+        params.set('e', ends.map(v => (v === null ? '' : String(v))).join(','));
+        const resp = await fetch('/data?' + params.toString());
+        if (!resp.ok) throw new Error('Failed to fetch data');
+        return await resp.json();
+      }
+
+      function ensureChartsExist(seriesNames) {
+        const charts = document.getElementById('charts');
+        charts.innerHTML = '';
+        // Group series by category
+        const grouped = {};
+        seriesNames.forEach((name) => {
+          const cat = categoryOf(name);
+          if (!grouped[cat]) grouped[cat] = [];
+          grouped[cat].push(name);
+        });
+        // Render in configured category order first, then any extra categories
+        const presentCats = Object.keys(grouped);
+        const orderedCats = [
+          ...categoriesOrder.filter((c) => presentCats.includes(c)),
+          ...presentCats.filter((c) => !categoriesOrder.includes(c)).sort()
+        ];
+        orderedCats.forEach((cat) => {
+          const section = document.createElement('section');
+          section.className = 'category';
+          const h = document.createElement('h2');
+          h.textContent = cat;
+          section.appendChild(h);
+          const grid = document.createElement('div');
+          grid.className = 'category-grid';
+          const names = grouped[cat].slice().sort();
+          names.forEach((name) => {
+            const div = document.createElement('div');
+            div.className = 'chart';
+            const title = document.createElement('h3');
+            title.textContent = name;
+            const plot = document.createElement('div');
+            plot.id = makeId(name);
+            plot.style.width = '100%';
+            plot.style.height = '320px';
+            div.appendChild(title);
+            div.appendChild(plot);
+            grid.appendChild(div);
+          });
+          section.appendChild(grid);
+          charts.appendChild(section);
+        });
+      }
+
+      function renderCharts(seriesData) {
+        const colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#e377c2', '#8c564b'];
+        const seriesNames = Object.keys(seriesData);
+        seriesNames.forEach((name) => {
+          const traces = (seriesData[name] || []).map((src, i) => ({
+            x: src.x || [],
+            y: src.y || [],
+            mode: 'lines',
+            name: sourceLabels[i] || `src ${i}`,
+            line: { color: colors[i % colors.length], width: 1.5 }
+          }));
+          // Apply global source visibility
+          traces.forEach((t, i) => {
+            if (!globalSourceEnabled[i]) {
+              t.visible = 'legendonly';
+            }
+          });
+          const layout = {
+            margin: { l: 40, r: 10, t: 10, b: 30 },
+            showlegend: true,
+            legend: { orientation: 'h' },
+            xaxis: { title: 'step_id + offset' },
+            yaxis: { title: name }
+          };
+          Plotly.react(makeId(name), traces, layout, { responsive: true });
+        });
+      }
+
+      function initSourceToggles() {
+        const container = document.getElementById('source-toggles');
+        container.querySelectorAll('.src-toggle').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const idx = parseInt(btn.getAttribute('data-index'), 10);
+            if (!Number.isFinite(idx)) return;
+            globalSourceEnabled[idx] = !globalSourceEnabled[idx];
+            btn.classList.toggle('src-off', !globalSourceEnabled[idx]);
+            // Re-render with current data and offsets
+            const offsets = getOffsets();
+            const starts = getStarts();
+            const ends = getEnds();
+            fetchDataWithOffsets(offsets, starts, ends).then((data) => {
+              lastSeriesData = data.series_data;
+              rerenderWithFilter();
+            });
+          });
+        });
+      }
+
+      async function refresh() {
+        try {
+          showStatus('Loading...');
+          const offsets = getOffsets();
+          const starts = getStarts();
+          const ends = getEnds();
+          const data = await fetchDataWithOffsets(offsets, starts, ends);
+          lastSeriesData = data.series_data;
+          rerenderWithFilter();
+          showStatus('');
+        } catch (err) {
+          console.error(err);
+          showStatus('Error loading data');
+        }
+      }
+
+      document.getElementById('apply').addEventListener('click', refresh);
+
+      // init
+      buildOffsetControls();
+      // build chart shells first (filtered if any search typed before fetch)
+      rerenderWithFilter();
+      // Hook up search box
+      document.getElementById('search').addEventListener('input', (e) => {
+        searchQuery = e.target.value || '';
+        if (searchDebounceHandle) clearTimeout(searchDebounceHandle);
+        searchDebounceHandle = setTimeout(() => {
+          rerenderWithFilter();
+        }, 120);
+      });
+      initSourceToggles();
+      refresh();
+    </script>
+  </body>
+</html>
+
