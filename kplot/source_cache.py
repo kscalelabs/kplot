@@ -13,10 +13,11 @@ from watchdog.events import FileSystemEventHandler, FileSystemEvent
 class DataSource:
     """Represents a single data source (kinfer log file)."""
     
-    def __init__(self, label: str, path: str) -> None:
+    def __init__(self, label: str, path: str, mtime: float = 0.0) -> None:
         self.label = label
         self.search_text = label.lower()
         self.path = path
+        self.mtime = mtime  # File modification time
         self.series_to_points: dict[str, List[Tuple[int, float]]] = {}
         self.loaded = False
     
@@ -202,10 +203,9 @@ class SourceCache:
                 
                 robot_name, run_dir = parts[0], parts[1]
                 label = f"{robot_name} | {run_dir}"
-                dir_path = os.path.join(self.data_dir, robot_name, run_dir)
-                mtime = os.path.getmtime(dir_path)
+                mtime = os.path.getmtime(ndjson_path)
                 
-                discovered.append((mtime, DataSource(label, ndjson_path)))
+                discovered.append((mtime, DataSource(label, ndjson_path, mtime)))
                 
                 if self.debug:
                     print(f"[SourceCache] Found: {label} (mtime: {mtime})")

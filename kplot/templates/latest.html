@@ -203,6 +203,7 @@
     <script>
       let currentSourceIndex = {{ latest_index }};
       let currentSourceLabel = {{ latest_label | tojson }};
+      let currentSourceMtime = null;  // Track file modification time
       let allSeries = [];
       let seriesData = null;
       let plotSearchQuery = '';
@@ -357,7 +358,7 @@
       }
 
       // Load data for the latest source
-      async function loadData() {
+      async function loadData(forceReload = false) {
         if (currentSourceIndex === -1) {
           seriesData = null;
           allSeries = [];
@@ -367,7 +368,10 @@
 
         try {
           document.getElementById('status').textContent = 'Loading...';
-          const resp = await fetch('/data?sources=' + currentSourceIndex);
+          
+          // Force cache bust on reload to get fresh data
+          const cacheBuster = forceReload ? '&_=' + Date.now() : '';
+          const resp = await fetch('/data?sources=' + currentSourceIndex + cacheBuster);
           const data = await resp.json();
           seriesData = data.series_data;
           allSeries = data.series || [];
@@ -379,19 +383,33 @@
         }
       }
 
-      // Check for new latest source
+      // Check for new latest source or file updates
       async function checkForUpdates() {
         try {
           const resp = await fetch('/latest-info');
           const data = await resp.json();
           
-          if (data.index !== currentSourceIndex || data.label !== currentSourceLabel) {
+          // Check if source changed (new file) OR if existing file was modified
+          const sourceChanged = data.index !== currentSourceIndex || data.label !== currentSourceLabel;
+          const fileModified = data.mtime !== null && currentSourceMtime !== null && 
+                              data.mtime !== currentSourceMtime;
+          
+          if (sourceChanged) {
             // New latest source detected!
             console.log('New latest source detected:', data.label);
             currentSourceIndex = data.index;
             currentSourceLabel = data.label;
+            currentSourceMtime = data.mtime;
             document.getElementById('current-source').textContent = data.label || 'No data';
-            await loadData();
+            await loadData(true);
+          } else if (fileModified) {
+            // Existing file was updated (appended to)
+            console.log('File update detected:', data.label, 'new mtime:', data.mtime);
+            currentSourceMtime = data.mtime;
+            await loadData(true);
+          } else if (currentSourceMtime === null && data.mtime !== null) {
+            // Initialize mtime on first check
+            currentSourceMtime = data.mtime;
           }
         } catch (err) {
           console.error('Error checking for updates:', err);

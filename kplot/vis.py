@@ -88,12 +88,14 @@ def latest_info() -> str:
             "index": 0,
             "label": sources[0].label,
             "path": sources[0].path,
+            "mtime": sources[0].mtime,
         })
     else:
         return jsonify({
             "index": -1,
             "label": None,
             "path": None,
+            "mtime": None,
         })
 
 
