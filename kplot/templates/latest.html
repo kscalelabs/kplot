@@ -241,10 +241,17 @@
         return 'Other';
       }
 
+
       // Render charts
       function render() {
         const plots = getFilteredPlots();
         const charts = document.getElementById('charts');
+        
+        // Purge existing plots before clearing
+        charts.querySelectorAll('[id^="chart-"]').forEach(el => {
+          Plotly.purge(el);
+        });
+        
         charts.innerHTML = '';
 
         if (currentSourceIndex === -1 || !currentSourceLabel) {
@@ -443,6 +450,10 @@
         if (autoRefreshInterval) {
           clearInterval(autoRefreshInterval);
         }
+        // Clean up all plots
+        document.querySelectorAll('[id^="chart-"]').forEach(el => {
+          Plotly.purge(el);
+        });
       });
     </script>
   </body>

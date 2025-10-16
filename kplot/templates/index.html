@@ -378,6 +378,12 @@
       function render() {
         const plots = getFilteredPlots();
         const charts = document.getElementById('charts');
+        
+        // Purge existing plots before clearing
+        charts.querySelectorAll('[id^="chart-"]').forEach(el => {
+          Plotly.purge(el);
+        });
+        
         charts.innerHTML = '';
 
         // Apply layout class
@@ -568,6 +574,13 @@
         layoutMode = layoutToggle.checked ? 'panes' : 'full';
         render();
       };
+
+      // Cleanup on page unload
+      window.addEventListener('beforeunload', () => {
+        document.querySelectorAll('[id^="chart-"]').forEach(el => {
+          Plotly.purge(el);
+        });
+      });
 
     </script>
   </body>
