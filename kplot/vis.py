@@ -2,10 +2,12 @@ import os
 import json
 from typing import Dict, List, Tuple, Any, Optional
 from flask import Flask, jsonify, request, render_template
+from flask_compress import Compress
 from .source_cache import SourceCache, DataSource
 
 
 app = Flask(__name__)
+Compress(app)  # Enable automatic gzip compression for all responses
 
 
 # Global source cache (initialized by server.py)
