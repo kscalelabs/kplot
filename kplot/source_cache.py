@@ -85,6 +85,11 @@ def extract_series(record: dict[str, Any], joint_names: List[str]) -> dict[str, 
             
         if is_number(value):
             series[key] = float(value)
+        elif isinstance(value, dict):
+            # Handle dict values (e.g., command as dict)
+            for sub_key, sub_value in value.items():
+                if is_number(sub_value):
+                    series[f"{key}.{sub_key}"] = float(sub_value)
         elif isinstance(value, list):
             if key in JOINTED_KEYS:
                 for idx, v in enumerate(value):
