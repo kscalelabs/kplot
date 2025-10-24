@@ -71,17 +71,18 @@ def index() -> str:
 def latest() -> str:
     """Render the latest run viewer page."""
     sources = scan_sources()
-    if sources:
-        latest_index = 0
+    cache = get_cache()
+    if sources and cache:
         latest_label = sources[0].label
+        latest_path = cache.get_relative_path(sources[0])
     else:
-        latest_index = -1
         latest_label = None
+        latest_path = None
     
     return render_template(
         "latest.html",
-        latest_index=latest_index,
         latest_label=latest_label,
+        latest_path=latest_path,
     )
 
 
@@ -89,16 +90,15 @@ def latest() -> str:
 def latest_info() -> str:
     """Return info about the current latest source (for auto-refresh polling)."""
     sources = scan_sources()
-    if sources:
+    cache = get_cache()
+    if sources and cache:
         return jsonify({
-            "index": 0,
             "label": sources[0].label,
-            "path": sources[0].path,
+            "path": cache.get_relative_path(sources[0]),
             "mtime": sources[0].mtime,
         })
     else:
         return jsonify({
-            "index": -1,
             "label": None,
             "path": None,
             "mtime": None,

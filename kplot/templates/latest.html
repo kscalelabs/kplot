@@ -201,7 +201,7 @@
     </div>
 
     <script>
-      let currentSourceIndex = {{ latest_index }};
+      let currentSourcePath = {{ latest_path | tojson }};
       let currentSourceLabel = {{ latest_label | tojson }};
       let currentSourceMtime = null;  // Track file modification time
       let allSeries = [];
@@ -254,7 +254,7 @@
         
         charts.innerHTML = '';
 
-        if (currentSourceIndex === -1 || !currentSourceLabel) {
+        if (!currentSourcePath || !currentSourceLabel) {
           charts.innerHTML = `
             <div class="empty-state">
               <h2>No Data Available</h2>
@@ -366,7 +366,7 @@
 
       // Load data for the latest source
       async function loadData(forceReload = false) {
-        if (currentSourceIndex === -1) {
+        if (!currentSourcePath) {
           seriesData = null;
           allSeries = [];
           render();
@@ -376,9 +376,13 @@
         try {
           document.getElementById('status').textContent = 'Loading...';
           
-          // Force cache bust on reload to get fresh data
-          const cacheBuster = forceReload ? '&_=' + Date.now() : '';
-          const resp = await fetch('/data?sources=' + currentSourceIndex + cacheBuster);
+          // Use stable path identifier
+          const params = new URLSearchParams();
+          params.set('sources', currentSourcePath);
+          if (forceReload) {
+            params.set('_', Date.now().toString()); // Cache buster
+          }
+          const resp = await fetch('/data?' + params.toString());
           const data = await resp.json();
           seriesData = data.series_data;
           allSeries = data.series || [];
@@ -397,14 +401,14 @@
           const data = await resp.json();
           
           // Check if source changed (new file) OR if existing file was modified
-          const sourceChanged = data.index !== currentSourceIndex || data.label !== currentSourceLabel;
+          const sourceChanged = data.path !== currentSourcePath || data.label !== currentSourceLabel;
           const fileModified = data.mtime !== null && currentSourceMtime !== null && 
                               data.mtime !== currentSourceMtime;
           
           if (sourceChanged) {
             // New latest source detected!
             console.log('New latest source detected:', data.label);
-            currentSourceIndex = data.index;
+            currentSourcePath = data.path;
             currentSourceLabel = data.label;
             currentSourceMtime = data.mtime;
             document.getElementById('current-source').textContent = data.label || 'No data';
