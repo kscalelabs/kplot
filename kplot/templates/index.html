@@ -257,6 +257,7 @@
     <script>
       let sourceLabels = {{ source_labels_json | safe }};
       let searchTexts = {{ search_texts_json | safe }};
+      let sourcePaths = {{ source_paths_json | safe }}; // Stable identifiers for sources
       let selectedSources = []; // Indices of selected sources
       let allSeries = [];
       let seriesData = null;
@@ -268,12 +269,27 @@
       function parseUrlParams() {
         const params = new URLSearchParams(window.location.search);
         
-        // Restore selected sources
+        // Restore selected sources (using stable path identifiers)
         const sourcesParam = params.get('sources');
         if (sourcesParam) {
           try {
-            const indices = sourcesParam.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-            selectedSources = indices.filter(idx => idx >= 0 && idx < sourceLabels.length);
+            const identifiers = sourcesParam.split(',').map(s => s.trim()).filter(s => s);
+            selectedSources = [];
+            
+            // Convert paths back to indices
+            for (const identifier of identifiers) {
+              // Try finding by path
+              const idx = sourcePaths.indexOf(identifier);
+              if (idx !== -1) {
+                selectedSources.push(idx);
+              } else {
+                // Fallback: try as numeric index for backward compatibility
+                const numIdx = parseInt(identifier);
+                if (!isNaN(numIdx) && numIdx >= 0 && numIdx < sourceLabels.length) {
+                  selectedSources.push(numIdx);
+                }
+              }
+            }
           } catch (e) {
             console.error('Error parsing sources parameter:', e);
           }
@@ -294,13 +310,16 @@
         }
       }
 
-      // Update URL with current state
+      // Update URL with current state (using stable path identifiers)
       function updateUrl() {
         const params = new URLSearchParams();
         
-        // Add selected sources
+        // Add selected sources using stable paths
         if (selectedSources.length > 0) {
-          params.set('sources', selectedSources.join(','));
+          const paths = selectedSources.map(idx => sourcePaths[idx]).filter(p => p);
+          if (paths.length > 0) {
+            params.set('sources', paths.join(','));
+          }
         }
         
         // Add plot search if present
@@ -564,7 +583,11 @@
 
         try {
           document.getElementById('status').textContent = 'Loading...';
-          const resp = await fetch('/data?sources=' + selectedSources.join(','));
+          // Use stable path identifiers instead of indices
+          const paths = selectedSources.map(idx => sourcePaths[idx]).filter(p => p);
+          const params = new URLSearchParams();
+          params.set('sources', paths.join(','));
+          const resp = await fetch('/data?' + params.toString());
           const data = await resp.json();
           seriesData = data.series_data;
           seriesData._sources = data.sources; // Store source labels
@@ -585,6 +608,7 @@
           if (JSON.stringify(data.sources) !== JSON.stringify(sourceLabels)) {
             sourceLabels = data.sources;
             searchTexts = data.search_texts || sourceLabels.map(s => s.toLowerCase());
+            sourcePaths = data.paths || [];
             buildSourceList();
           }
         } catch (err) {

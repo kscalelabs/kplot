@@ -54,11 +54,15 @@ def index() -> str:
     sources = scan_sources()
     labels = [s.label for s in sources]
     search_texts = [s.search_text for s in sources]
+    # Get relative paths for stable identifiers
+    cache = get_cache()
+    paths = [cache.get_relative_path(s) if cache else "" for s in sources]
     return render_template(
         "index.html",
         source_labels=enumerate(labels),
         source_labels_json=json.dumps(labels),
         search_texts_json=json.dumps(search_texts),
+        source_paths_json=json.dumps(paths),
         all_series_json=json.dumps([]),
     )
 
@@ -105,9 +109,11 @@ def latest_info() -> str:
 def list_sources() -> str:
     """Return list of available data sources."""
     sources = scan_sources()
+    cache = get_cache()
     return jsonify({
         "sources": [s.label for s in sources],
-        "search_texts": [s.search_text for s in sources]
+        "search_texts": [s.search_text for s in sources],
+        "paths": [cache.get_relative_path(s) if cache else "" for s in sources]
     })
 
 
@@ -116,23 +122,35 @@ def data() -> str:
     """Return series data for user-selected sources.
 
     Query params:
-      - sources: comma-separated indices into scan_sources() ordering
+      - sources: comma-separated paths or indices into scan_sources() ordering
       - o: optional comma-separated integer offsets per selected source
     """
     selected_raw = request.args.get("sources", "")
     if not selected_raw:
         return jsonify({"sources": [], "series_data": {}})
 
-    try:
-        selected_indices = [int(x.strip()) for x in selected_raw.split(",") if x.strip()]
-    except Exception:
+    selected_identifiers = [x.strip() for x in selected_raw.split(",") if x.strip()]
+    if not selected_identifiers:
         return jsonify({"sources": [], "series_data": {}})
 
     all_sources = scan_sources()
+    cache = get_cache()
     selected_sources: List[DataSource] = []
-    for idx in selected_indices:
-        if 0 <= idx < len(all_sources):
-            ds = all_sources[idx]
+    
+    for identifier in selected_identifiers:
+        ds = None
+        
+        # Try as numeric index first for backward compatibility
+        try:
+            idx = int(identifier)
+            if 0 <= idx < len(all_sources):
+                ds = all_sources[idx]
+        except ValueError:
+            # Not a number, try as path
+            if cache:
+                ds = cache.get_source_by_path(identifier)
+        
+        if ds:
             ds.load()
             selected_sources.append(ds)
 

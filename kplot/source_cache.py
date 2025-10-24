@@ -269,6 +269,40 @@ class SourceCache:
         with self._lock:
             return self._sources.copy()
     
+    def get_source_by_path(self, path: str) -> Optional[DataSource]:
+        """Get a data source by its absolute or relative path.
+        
+        Args:
+            path: Absolute path or relative path from data_dir
+            
+        Returns:
+            DataSource object or None if not found
+        """
+        with self._lock:
+            # Try as absolute path first
+            for source in self._sources:
+                if source.path == path:
+                    return source
+            
+            # Try as relative path from data_dir
+            abs_path = os.path.join(self.data_dir, path)
+            for source in self._sources:
+                if source.path == abs_path:
+                    return source
+            
+            return None
+    
+    def get_relative_path(self, source: DataSource) -> str:
+        """Get the relative path from data_dir for a source.
+        
+        Args:
+            source: DataSource object
+            
+        Returns:
+            Relative path from data_dir
+        """
+        return os.path.relpath(source.path, self.data_dir)
+    
     def start_watching(self) -> None:
         """Start watching the data directory for changes."""
         if self._observer is not None:
