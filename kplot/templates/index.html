@@ -240,6 +240,7 @@
         <header>
           <input type="text" id="plot-search" placeholder="Search plots..." style="padding: 6px 12px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 3px; color: #cccccc; font-size: 13px; min-width: 300px; outline: none;" />
           <button id="refresh-btn">Refresh</button>
+          <button id="copy-link-btn" style="background: #3c3c3c; color: #cccccc;" title="Copy shareable link">Copy Link</button>
           <button style="background: #3c3c3c; color: #cccccc;" onclick="window.location.href='/latest'">Latest View</button>
           <label class="control-group" title="Toggle layout mode">
             <input type="checkbox" id="layout-toggle" checked />
@@ -262,6 +263,62 @@
       let plotSearchQuery = '';
       let sourceSearchQuery = '';
       let layoutMode = 'panes'; // 'full' or 'panes'
+
+      // Parse URL parameters to restore state
+      function parseUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        
+        // Restore selected sources
+        const sourcesParam = params.get('sources');
+        if (sourcesParam) {
+          try {
+            const indices = sourcesParam.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+            selectedSources = indices.filter(idx => idx >= 0 && idx < sourceLabels.length);
+          } catch (e) {
+            console.error('Error parsing sources parameter:', e);
+          }
+        }
+        
+        // Restore plot search query
+        const plotSearchParam = params.get('plots');
+        if (plotSearchParam) {
+          plotSearchQuery = plotSearchParam;
+          document.getElementById('plot-search').value = plotSearchParam;
+        }
+        
+        // Restore layout mode
+        const layoutParam = params.get('layout');
+        if (layoutParam === 'full' || layoutParam === 'panes') {
+          layoutMode = layoutParam;
+          document.getElementById('layout-toggle').checked = layoutMode === 'panes';
+        }
+      }
+
+      // Update URL with current state
+      function updateUrl() {
+        const params = new URLSearchParams();
+        
+        // Add selected sources
+        if (selectedSources.length > 0) {
+          params.set('sources', selectedSources.join(','));
+        }
+        
+        // Add plot search if present
+        if (plotSearchQuery) {
+          params.set('plots', plotSearchQuery);
+        }
+        
+        // Add layout mode if not default
+        if (layoutMode !== 'panes') {
+          params.set('layout', layoutMode);
+        }
+        
+        // Update URL without reloading
+        const newUrl = params.toString() ? 
+          `${window.location.pathname}?${params.toString()}` : 
+          window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
 
       function makeId(name) {
         return 'chart-' + name.replace(/[^a-zA-Z0-9_\-]/g, '_');
@@ -310,6 +367,7 @@
             } else {
               selectedSources = selectedSources.filter(i => i !== idx);
             }
+            updateUrl();
             loadData();
           };
           
@@ -535,8 +593,13 @@
       }
 
       // Initialize
+      parseUrlParams(); // Parse URL params first to restore state
       buildSourceList();
-      render();
+      if (selectedSources.length > 0) {
+        loadData(); // Load data if sources were restored from URL
+      } else {
+        render(); // Just render empty state
+      }
 
       // Source search
       let sourceSearchTimeout;
@@ -554,6 +617,7 @@
         clearTimeout(plotSearchTimeout);
         plotSearchTimeout = setTimeout(() => {
           plotSearchQuery = e.target.value.trim();
+          updateUrl();
           render();
         }, 100);
       };
@@ -561,17 +625,37 @@
       // Clear all button
       document.getElementById('deselect-all-sources').onclick = () => {
         selectedSources = [];
+        updateUrl();
         buildSourceList();
         loadData();
       };
 
       document.getElementById('refresh-btn').onclick = loadData;
 
+      // Copy link button
+      document.getElementById('copy-link-btn').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(window.location.href);
+          const btn = document.getElementById('copy-link-btn');
+          const originalText = btn.textContent;
+          btn.textContent = 'Copied!';
+          btn.style.background = '#4ec9b0';
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.background = '#3c3c3c';
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy link:', err);
+          alert('Failed to copy link. Please copy from the address bar.');
+        }
+      };
+
       // Layout toggle checkbox
       const layoutToggle = document.getElementById('layout-toggle');
       layoutToggle.checked = layoutMode === 'panes';
       layoutToggle.onchange = () => {
         layoutMode = layoutToggle.checked ? 'panes' : 'full';
+        updateUrl();
         render();
       };
 
